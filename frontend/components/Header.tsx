@@ -14,14 +14,6 @@ export function Header() {
             <p className="font-display text-xl font-semibold text-white">Día del Niño</p>
           </div>
         </div>
-        <nav className="flex items-center gap-4 text-sm">
-          <a
-            href="#formulario"
-            className="rounded-full bg-red px-4 py-2 font-display text-sm font-medium text-white transition hover:bg-red-deep"
-          >
-            Participar
-          </a>
-        </nav>
       </div>
     </header>
   );
