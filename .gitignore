@@ -1,0 +1,32 @@
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env*.local
+frontend/npm-debug.log*
+
+admin/node_modules/
+admin/.next/
+admin/out/
+admin/.env.local
+admin/.env*.local
+admin/npm-debug.log*
+
+# Python / FastAPI
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/.venv/
+backend/venv/
+backend/.env
+backend/.pytest_cache/
+backend/*.egg-info/
+
+# General
+.DS_Store
+*.log
+.idea/
+.vscode/
+.venv/
+venv/

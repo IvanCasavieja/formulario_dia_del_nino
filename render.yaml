@@ -1,0 +1,139 @@
+services:
+  - type: web
+    name: formulario-web
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: .
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: formulario-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: formulario-redis
+          property: connectionString
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: us-east-1
+      - key: UPLOAD_TOKEN_SECRET
+        sync: false
+      - key: ADMIN_JWT_SECRET
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      # Fill in once the real subdomain/custom domain is assigned - defaults to
+      # localhost only, which would CORS-block the deployed frontend. The default
+      # CORS_ALLOW_ORIGIN_REGEX (https://.*\.vercel\.app) already covers the raw
+      # Vercel preview/prod URL, but not a custom Tienda Inglesa subdomain.
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
+
+  - type: worker
+    name: formulario-worker
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: .
+    startCommand: python -m app.worker.run
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: formulario-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: formulario-redis
+          property: connectionString
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: us-east-1
+      - key: UPLOAD_TOKEN_SECRET
+        sync: false
+      - key: ADMIN_JWT_SECRET
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+
+  # Marks abandoned pending_upload rows (form submitted, video never confirmed
+  # uploaded) as EXPIRED once they're older than PENDING_UPLOAD_EXPIRY_SECONDS. Reuses
+  # the same Docker image as web/worker - only the command differs. A single Python
+  # process talking to Postgres doesn't need R2/AWS credentials to do its job, but
+  # app.config.Settings requires them regardless (same typed settings module every
+  # entrypoint imports), so they're still wired here.
+  - type: cron
+    name: formulario-cleanup
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: .
+    schedule: "0 * * * *"
+    startCommand: python -m app.worker.cleanup
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: formulario-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: formulario-redis
+          property: connectionString
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: us-east-1
+      - key: UPLOAD_TOKEN_SECRET
+        sync: false
+      - key: ADMIN_JWT_SECRET
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+
+  - type: redis
+    name: formulario-redis
+    # The free Key Value tier is ephemeral (wiped on restart) - defeats the point of
+    # using a real queue with retries for the moderation/Salesforce jobs. Starter is
+    # the cheapest persistent tier.
+    plan: starter
+    ipAllowList: []
+
+  - type: psql
+    name: formulario-db
+    # basic-256mb is the cheapest real tier - plenty for this: the videos live in R2,
+    # this database only ever stores form-field rows, not the video bytes themselves.
+    # Bump to basic-1gb/basic-4gb only if you see real memory pressure under load.
+    plan: basic-256mb

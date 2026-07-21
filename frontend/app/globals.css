@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/*
+  Paleta "invitación de sorteo": rojo profundo de Tienda Inglesa como portada
+  festiva, papel cálido para el cuerpo, mostaza y verde azulado como acentos
+  de confeti. Deliberadamente un solo tema (no hay toggle claro/oscuro en un
+  formulario de campaña) - como una invitación impresa.
+*/
+:root {
+  --ink: #241417;
+  --ink-soft: #7a655f;
+  --bg: #faf6f4;
+  --surface: #ffffff;
+  --brand: #e11d48;
+  --brand-deep: #7a1030;
+  --sun: #f5a524;
+  --teal: #0e8388;
+  --line: #eadfda;
+  --cream: #f7ecd9;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-brand: var(--brand);
+  --color-brand-deep: var(--brand-deep);
+  --color-sun: var(--sun);
+  --color-teal: var(--teal);
+  --color-line: var(--line);
+  --color-cream: var(--cream);
+  --font-display: var(--font-fredoka);
+  --font-sans: var(--font-karla);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Confeti ambiental del hero - desactivado si el usuario prefiere menos movimiento. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes float-soft {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+    50% {
+      transform: translate3d(0, -16px, 0) rotate(4deg);
+    }
+  }
+
+  .animate-float-soft {
+    animation: float-soft 8s ease-in-out infinite;
+  }
+
+  .animate-float-soft-delay {
+    animation: float-soft 9s ease-in-out infinite;
+    animation-delay: -3s;
+  }
+}
+
+/*
+  Ticket-divider: separa secciones del formulario como la perforación de una
+  entrada de sorteo. Los dos círculos "muerden" el borde de la tarjeta con el
+  color del fondo de página, así que solo funciona dentro de un contenedor que
+  hace bleed hasta el borde real de la tarjeta (ver .ticket-notch en el form).
+*/
+.ticket-notch {
+  position: relative;
+  border-top: 2px dashed var(--line);
+}
+
+.ticket-notch::before,
+.ticket-notch::after {
+  content: "";
+  position: absolute;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: var(--bg);
+}
+
+.ticket-notch::before {
+  left: -11px;
+}
+
+.ticket-notch::after {
+  right: -11px;
+}
