@@ -42,7 +42,7 @@ export function ConsentCheckbox({ checked, onChange }: ConsentCheckboxProps) {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="font-medium text-blue underline underline-offset-2 hover:text-blue-deep"
+            className="cursor-pointer font-medium text-blue underline underline-offset-2 hover:text-blue-deep"
           >
             términos y condiciones
           </button>{' '}
@@ -62,7 +62,7 @@ export function ConsentCheckbox({ checked, onChange }: ConsentCheckboxProps) {
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Cerrar"
-            className="rounded-full px-2 py-1 text-ink-soft transition hover:bg-bg hover:text-ink"
+            className="cursor-pointer rounded-full px-2 py-1 text-ink-soft transition hover:bg-bg hover:text-ink"
           >
             ✕
           </button>
@@ -74,7 +74,7 @@ export function ConsentCheckbox({ checked, onChange }: ConsentCheckboxProps) {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="rounded-full bg-blue px-5 py-2 font-display text-sm font-medium text-white transition hover:bg-blue-deep"
+            className="cursor-pointer rounded-full bg-blue px-5 py-2 font-display text-sm font-medium text-white transition hover:bg-blue-deep"
           >
             Entendido
           </button>

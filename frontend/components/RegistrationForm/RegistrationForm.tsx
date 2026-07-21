@@ -252,7 +252,7 @@ export function RegistrationForm() {
         <button
           type="submit"
           disabled={isSubmitting || isUploading}
-          className="rounded-full bg-red px-6 py-3.5 font-display font-medium text-white shadow-lg shadow-red/20 transition hover:-translate-y-0.5 hover:bg-red-deep disabled:pointer-events-none disabled:opacity-60"
+          className="cursor-pointer rounded-full bg-red px-6 py-3.5 font-display font-medium text-white shadow-lg shadow-red/20 transition hover:-translate-y-0.5 hover:bg-red-deep disabled:pointer-events-none disabled:opacity-60"
         >
           {isSubmitting || isUploading ? 'Procesando...' : 'Enviar participación'}
         </button>
