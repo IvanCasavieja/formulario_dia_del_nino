@@ -1,15 +1,23 @@
+import Image from "next/image";
+import logo from "@/public/logo-tienda-inglesa.png";
+
 export function Header() {
   return (
-    <header className="bg-brand-deep">
+    <header className="bg-blue-deep">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
-        <div>
-          <p className="font-display text-xs font-medium uppercase tracking-[0.3em] text-sun">Tienda Inglesa</p>
-          <p className="font-display text-xl font-semibold text-cream">Día del Niño</p>
+        <div className="flex items-center gap-3">
+          <Image src={logo} alt="" width={36} height={36} priority />
+          <div>
+            <p className="font-display text-xs font-medium uppercase tracking-[0.3em] text-blue-light">
+              Tienda Inglesa
+            </p>
+            <p className="font-display text-xl font-semibold text-white">Día del Niño</p>
+          </div>
         </div>
         <nav className="flex items-center gap-4 text-sm">
           <a
             href="#formulario"
-            className="rounded-full bg-cream px-4 py-2 font-display text-sm font-medium text-brand-deep transition hover:bg-sun"
+            className="rounded-full bg-red px-4 py-2 font-display text-sm font-medium text-white transition hover:bg-red-deep"
           >
             Participar
           </a>

@@ -17,7 +17,7 @@ export function ConsentCheckbox({ checked, onChange, legalText = DEFAULT_LEGAL_T
     <label className="flex items-start gap-3 rounded-xl border border-line bg-bg p-4 text-sm text-ink-soft">
       <input
         type="checkbox"
-        className="mt-1 h-4 w-4 rounded border-line text-brand accent-brand"
+        className="mt-1 h-4 w-4 rounded border-line text-blue accent-blue"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
       />

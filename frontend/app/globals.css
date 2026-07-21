@@ -1,22 +1,21 @@
 @import "tailwindcss";
 
 /*
-  Paleta "invitación de sorteo": rojo profundo de Tienda Inglesa como portada
-  festiva, papel cálido para el cuerpo, mostaza y verde azulado como acentos
-  de confeti. Deliberadamente un solo tema (no hay toggle claro/oscuro en un
-  formulario de campaña) - como una invitación impresa.
+  Paleta real de Tienda Inglesa, tomada del logo oficial (#0047BA / #F6323E):
+  azul como color dominante, blanco como base/detalle, rojo como acento
+  puntual (solo CTA y pequeños highlights) - no como color de fondo.
 */
 :root {
-  --ink: #241417;
-  --ink-soft: #7a655f;
-  --bg: #faf6f4;
+  --ink: #101b2d;
+  --ink-soft: #51607a;
+  --bg: #f5f8fc;
   --surface: #ffffff;
-  --brand: #e11d48;
-  --brand-deep: #7a1030;
-  --sun: #f5a524;
-  --teal: #0e8388;
-  --line: #eadfda;
-  --cream: #f7ecd9;
+  --line: #dce6f5;
+  --blue: #0047ba;
+  --blue-deep: #082a5e;
+  --blue-light: #a9c6f5;
+  --red: #f6323e;
+  --red-deep: #c41f2a;
 }
 
 @theme inline {
@@ -24,12 +23,12 @@
   --color-ink-soft: var(--ink-soft);
   --color-bg: var(--bg);
   --color-surface: var(--surface);
-  --color-brand: var(--brand);
-  --color-brand-deep: var(--brand-deep);
-  --color-sun: var(--sun);
-  --color-teal: var(--teal);
   --color-line: var(--line);
-  --color-cream: var(--cream);
+  --color-blue: var(--blue);
+  --color-blue-deep: var(--blue-deep);
+  --color-blue-light: var(--blue-light);
+  --color-red: var(--red);
+  --color-red-deep: var(--red-deep);
   --font-display: var(--font-fredoka);
   --font-sans: var(--font-karla);
 }
@@ -39,7 +38,7 @@ body {
   color: var(--ink);
 }
 
-/* Confeti ambiental del hero - desactivado si el usuario prefiere menos movimiento. */
+/* Deriva suave del ícono de marca en el hero - desactivada si el usuario prefiere menos movimiento. */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes float-soft {
     0%,
@@ -47,17 +46,12 @@ body {
       transform: translate3d(0, 0, 0) rotate(0deg);
     }
     50% {
-      transform: translate3d(0, -16px, 0) rotate(4deg);
+      transform: translate3d(0, -14px, 0) rotate(2deg);
     }
   }
 
   .animate-float-soft {
-    animation: float-soft 8s ease-in-out infinite;
-  }
-
-  .animate-float-soft-delay {
-    animation: float-soft 9s ease-in-out infinite;
-    animation-delay: -3s;
+    animation: float-soft 10s ease-in-out infinite;
   }
 }
 

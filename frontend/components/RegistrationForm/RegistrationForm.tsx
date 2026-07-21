@@ -127,14 +127,14 @@ export function RegistrationForm() {
   };
 
   const inputClass =
-    'rounded-xl border border-line bg-surface px-4 py-3 text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15';
+    'rounded-xl border border-line bg-surface px-4 py-3 text-ink outline-none transition focus:border-blue focus:ring-2 focus:ring-blue/15';
   const labelClass = 'flex flex-col gap-2 text-sm font-medium text-ink-soft';
-  const errorClass = 'text-xs font-medium text-brand-deep';
+  const errorClass = 'text-xs font-medium text-red-deep';
 
   function SectionHeading({ n, title }: { n: string; title: string }) {
     return (
       <div className="flex items-center gap-3">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand font-display text-sm font-semibold text-cream">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue font-display text-sm font-semibold text-white">
           {n}
         </span>
         <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
@@ -151,8 +151,8 @@ export function RegistrationForm() {
       id="formulario"
       className="mx-auto w-full max-w-3xl overflow-hidden rounded-[2rem] border border-line bg-surface shadow-[0_20px_45px_-25px_rgba(36,20,23,0.35)]"
     >
-      <div className="bg-brand-deep px-6 py-4 sm:px-8">
-        <p className="font-display text-xs font-medium uppercase tracking-[0.3em] text-sun">Formulario de inscripción</p>
+      <div className="bg-blue-deep px-6 py-4 sm:px-8">
+        <p className="font-display text-xs font-medium uppercase tracking-[0.3em] text-blue-light">Formulario de inscripción</p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6 p-6 sm:p-8">
@@ -215,7 +215,7 @@ export function RegistrationForm() {
             type="file"
             accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm"
             onChange={handleFileChange}
-            className={`${inputClass} file:mr-4 file:rounded-full file:border-0 file:bg-brand file:px-4 file:py-2 file:font-display file:text-sm file:font-medium file:text-cream file:transition hover:file:bg-brand-deep`}
+            className={`${inputClass} file:mr-4 file:rounded-full file:border-0 file:bg-blue file:px-4 file:py-2 file:font-display file:text-sm file:font-medium file:text-white file:transition hover:file:bg-blue-deep`}
           />
           <span className="text-xs text-ink-soft">{videoHint}</span>
           {videoMessage && <span className={errorClass}>{videoMessage}</span>}
@@ -232,7 +232,7 @@ export function RegistrationForm() {
             <div className="mt-3 space-y-1.5">
               <div className="h-2 overflow-hidden rounded-full bg-line">
                 <div
-                  className="h-full rounded-full bg-brand transition-[width]"
+                  className="h-full rounded-full bg-blue transition-[width]"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -252,13 +252,13 @@ export function RegistrationForm() {
         <button
           type="submit"
           disabled={isSubmitting || isUploading}
-          className="rounded-full bg-brand px-6 py-3.5 font-display font-medium text-cream shadow-lg shadow-brand/20 transition hover:-translate-y-0.5 hover:bg-brand-deep disabled:pointer-events-none disabled:opacity-60"
+          className="rounded-full bg-red px-6 py-3.5 font-display font-medium text-white shadow-lg shadow-red/20 transition hover:-translate-y-0.5 hover:bg-red-deep disabled:pointer-events-none disabled:opacity-60"
         >
           {isSubmitting || isUploading ? 'Procesando...' : 'Enviar participación'}
         </button>
 
         {submissionError && (
-          <p className="rounded-xl border border-brand/20 bg-brand/5 p-3 text-sm text-brand-deep">{submissionError}</p>
+          <p className="rounded-xl border border-red/20 bg-red/5 p-3 text-sm text-red-deep">{submissionError}</p>
         )}
       </form>
     </div>
