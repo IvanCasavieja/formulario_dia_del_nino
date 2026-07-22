@@ -21,9 +21,12 @@ export const registrationSchema = z.object({
     const digits = onlyDigits(value);
     return digits.length >= constants.CHILD_CEDULA_MIN_DIGITS && digits.length <= constants.CHILD_CEDULA_MAX_DIGITS;
   }, "La cédula del menor debe tener entre 7 y 8 dígitos").refine((value) => !onlyDigits(value).startsWith("0"), "La cédula del menor no puede empezar con 0"),
-  video_content_type: z.string().refine((value) => constants.ALLOWED_VIDEO_MIME_TYPES.includes(value), "Formato no soportado"),
-  video_declared_size_bytes: z.number().int().positive().max(constants.MAX_VIDEO_SIZE_BYTES, "El video no puede superar 200 MB"),
-  video_declared_duration_seconds: z.number().positive().max(constants.MAX_VIDEO_DURATION_SECONDS + constants.MAX_VIDEO_DURATION_TOLERANCE_SECONDS, "El video no puede superar los 60 segundos"),
+  // TEMP (R2 sin contratar, revertir a required cuando exista): .optional() para que
+  // zod no bloquee el submit cuando no se elige video. RegistrationForm.tsx arma
+  // valores dummy para estos 3 campos si no hay archivo seleccionado.
+  video_content_type: z.string().refine((value) => constants.ALLOWED_VIDEO_MIME_TYPES.includes(value), "Formato no soportado").optional(),
+  video_declared_size_bytes: z.number().int().positive().max(constants.MAX_VIDEO_SIZE_BYTES, "El video no puede superar 200 MB").optional(),
+  video_declared_duration_seconds: z.number().positive().max(constants.MAX_VIDEO_DURATION_SECONDS + constants.MAX_VIDEO_DURATION_TOLERANCE_SECONDS, "El video no puede superar los 60 segundos").optional(),
   terms_accepted: z.boolean().refine((value) => value, "Debes aceptar los términos para participar"),
   terms_version: z.string().min(1),
 });

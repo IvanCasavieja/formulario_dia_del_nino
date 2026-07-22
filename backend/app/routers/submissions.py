@@ -127,15 +127,20 @@ def confirm_upload(
             status_code=status.HTTP_409_CONFLICT, detail={"error": "already_confirmed", "status": submission.status}
         )
 
-    head = r2.head_object(submission.video_key)
-    if head is None or head.get("ContentLength", 0) <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"error": "video_not_found_in_storage"}
-        )
+    # TEMP (R2 sin contratar - revertir cuando exista): sin bucket real no hay nada que
+    # head_object pueda encontrar, así que este chequeo queda pausado. Es la única
+    # verificación de que el video realmente existe antes de avisarle a Salesforce/admin
+    # que la inscripción es real - reactivarlo es condición para ir a producción.
+    #
+    # head = r2.head_object(submission.video_key)
+    # if head is None or head.get("ContentLength", 0) <= 0:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"error": "video_not_found_in_storage"}
+    #     )
 
     submission.status = SubmissionStatus.UPLOADED
     submission.uploaded_at = datetime.now(timezone.utc)
-    submission.video_actual_size_bytes = head.get("ContentLength")
+    submission.video_actual_size_bytes = submission.video_declared_size_bytes  # TEMP: ver arriba
     db.commit()
 
     enqueue_submission_processing(str(submission.id))

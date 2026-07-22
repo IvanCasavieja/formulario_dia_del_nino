@@ -106,18 +106,36 @@ export function RegistrationForm() {
   const onSubmit = async (values: RegistrationFormValues) => {
     setSubmissionError(null);
 
-    // Defense-in-depth: handleFormSubmit below already blocks this case before
-    // react-hook-form's own validation runs, but keep the guard here too in case
-    // selectedFile/resolvedContentType ever gets out of sync with the form state.
-    if (!selectedFile || !resolvedContentType) {
-      setVideoRequiredError('Debes seleccionar un video para continuar.');
-      return;
-    }
+    // TEMP (R2 sin contratar - revertir cuando exista): video ya no es requisito para
+    // que el submit dispare la data a Salesforce. El botón de elegir archivo sigue
+    // visible/funcional, pero si no hay archivo se usan valores dummy inofensivos para
+    // los 3 campos de video (pasan las validaciones del backend igual) y se salta el
+    // upload real a R2 (que hoy fallaría, no existe el bucket).
+    //
+    // if (!selectedFile || !resolvedContentType) {
+    //   setVideoRequiredError('Debes seleccionar un video para continuar.');
+    //   return;
+    // }
     setVideoRequiredError(null);
 
+    const videoFields = selectedFile && resolvedContentType
+      ? {
+          video_content_type: resolvedContentType,
+          video_declared_size_bytes: values.video_declared_size_bytes as number,
+          video_declared_duration_seconds: values.video_declared_duration_seconds as number,
+        }
+      : {
+          video_content_type: 'video/mp4',
+          video_declared_size_bytes: 1,
+          video_declared_duration_seconds: 1,
+        };
+
     try {
-      const created = await createSubmission(values);
-      await upload(created.upload_url, selectedFile, resolvedContentType);
+      const created = await createSubmission({ ...values, ...videoFields });
+      // TEMP (R2 sin contratar - revertir cuando exista): sin bucket real no hay upload
+      // que hacer. Descomentar esta línea (y volver a exigir selectedFile arriba) apenas
+      // haya credenciales de R2:
+      // await upload(created.upload_url, selectedFile!, resolvedContentType!);
       await confirmUpload(created.submission_id, created.upload_token);
       router.push('/gracias');
     } catch (error) {
@@ -127,16 +145,15 @@ export function RegistrationForm() {
 
   const submitForm = handleSubmit(onSubmit);
 
-  // Runs before react-hook-form's own validation. Without this, submitting with no
-  // file selected leaves video_content_type/size/duration undefined, zod rejects the
-  // whole form on those hidden fields, handleSubmit never calls onSubmit, and nothing
-  // visible happens - no error anywhere, just a click that does nothing.
+  // TEMP (R2 sin contratar - revertir cuando exista): antes bloqueaba el submit acá
+  // mismo, antes de que corriera la validación de react-hook-form, si no había video
+  // elegido. Ver el comentario equivalente en onSubmit.
   const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    if (!selectedFile || !resolvedContentType) {
-      event.preventDefault();
-      setVideoRequiredError('Debes seleccionar un video para continuar.');
-      return;
-    }
+    // if (!selectedFile || !resolvedContentType) {
+    //   event.preventDefault();
+    //   setVideoRequiredError('Debes seleccionar un video para continuar.');
+    //   return;
+    // }
     submitForm(event);
   };
 

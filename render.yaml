@@ -35,6 +35,19 @@ services:
       # Vercel preview/prod URL, but not a custom Tienda Inglesa subdomain.
       - key: CORS_ALLOW_ORIGINS
         sync: false
+      # Salesforce Marketing Cloud - optional (SFMC_ENABLED defaults false), but this
+      # is the service that decides whether to enqueue a sync on confirm-upload, so it
+      # needs to agree with the worker below.
+      - key: SFMC_ENABLED
+        sync: false
+      - key: SFMC_SUBDOMAIN
+        sync: false
+      - key: SFMC_CLIENT_ID
+        sync: false
+      - key: SFMC_CLIENT_SECRET
+        sync: false
+      - key: SFMC_DATA_EXTENSION_KEY
+        sync: false
 
   - type: worker
     name: formulario-worker
@@ -65,6 +78,19 @@ services:
       - key: ADMIN_JWT_SECRET
         sync: false
       - key: ADMIN_PASSWORD_HASH
+        sync: false
+      # Salesforce Marketing Cloud - this is the process that actually calls the SFMC
+      # API when a sync job comes off the queue, so it needs real values whenever the
+      # web service above has SFMC_ENABLED=true.
+      - key: SFMC_ENABLED
+        sync: false
+      - key: SFMC_SUBDOMAIN
+        sync: false
+      - key: SFMC_CLIENT_ID
+        sync: false
+      - key: SFMC_CLIENT_SECRET
+        sync: false
+      - key: SFMC_DATA_EXTENSION_KEY
         sync: false
 
   # Marks abandoned pending_upload rows (form submitted, video never confirmed
