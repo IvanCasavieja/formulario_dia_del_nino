@@ -54,7 +54,7 @@ export function ConsentCheckbox({ checked, onChange }: ConsentCheckboxProps) {
       <dialog
         ref={dialogRef}
         onClose={() => setOpen(false)}
-        className="m-auto w-full max-w-lg rounded-2xl border border-line bg-surface p-0 shadow-xl backdrop:bg-ink/50 backdrop:backdrop-blur-sm"
+        className="m-auto w-[calc(100vw-2rem)] max-w-lg rounded-2xl border border-line bg-surface p-0 shadow-xl backdrop:bg-ink/50 backdrop:backdrop-blur-sm"
       >
         <div className="flex items-center justify-between border-b border-line px-6 py-4">
           <h2 className="font-display text-lg font-semibold text-ink">Términos y condiciones del sorteo</h2>
