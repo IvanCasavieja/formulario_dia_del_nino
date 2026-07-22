@@ -196,9 +196,12 @@ credenciales en este entorno para hacerlos:
      }
    ]
    ```
-3. **Crear un usuario de IAM en AWS** solo para Rekognition, con esta política de
-   mínimo privilegio (el `Resource: "*"` es correcto acá — Rekognition no soporta
-   scoping por recurso en esta API):
+3. **(Opcional, no bloquea el lanzamiento) Crear un usuario de IAM en AWS** solo para
+   Rekognition, con esta política de mínimo privilegio (el `Resource: "*"` es correcto
+   acá — Rekognition no soporta scoping por recurso en esta API). La moderación es
+   100% manual por ahora (`REKOGNITION_ENABLED=false` por defecto en
+   `backend/app/config.py`) — este paso solo hace falta si más adelante se decide
+   automatizarla:
    ```json
    {
      "Version": "2012-10-17",
@@ -230,10 +233,13 @@ credenciales en este entorno para hacerlos:
   (no hay cuentas de usuario) — pensado para un equipo chico de marketing revisando una
   campaña puntual. Al ser una app separada de la pública, conviene no indexarla ni
   enlazarla desde ningún lado público (ya tiene `robots: noindex` seteado).
-- Los videos marcados `needs_review` por Rekognition requieren aprobación manual desde
-  el panel de admin; los marcados `rejected` o `approved` son automáticos según los
-  umbrales de confianza configurados (`MODERATION_REJECT_CONFIDENCE` /
-  `MODERATION_REVIEW_CONFIDENCE` en `backend/app/config.py`).
+- Moderación 100% manual por ahora (`REKOGNITION_ENABLED=false`): todo video que pasa
+  la validación server-side (formato/duración/tamaño) cae en `needs_review` y espera
+  aprobación desde el panel de admin. La moderación automática con Rekognition
+  (`rejected`/`approved` según `MODERATION_REJECT_CONFIDENCE` /
+  `MODERATION_REVIEW_CONFIDENCE` en `backend/app/config.py`) sigue implementada y
+  probada, lista para activarse con `REKOGNITION_ENABLED=true` el día que se decida
+  automatizar.
 - Retención de datos: los registros (aprobados, rechazados o lo que sea) quedan
   indefinidamente en Postgres — no hay borrado automático, según confirmaron. Además se
   sincronizan a Salesforce Marketing Cloud (ver arriba).

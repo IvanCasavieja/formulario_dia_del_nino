@@ -23,12 +23,6 @@ services:
         sync: false
       - key: R2_BUCKET_NAME
         sync: false
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_REGION
-        value: us-east-1
       - key: UPLOAD_TOKEN_SECRET
         sync: false
       - key: ADMIN_JWT_SECRET
@@ -66,12 +60,6 @@ services:
         sync: false
       - key: R2_BUCKET_NAME
         sync: false
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_REGION
-        value: us-east-1
       - key: UPLOAD_TOKEN_SECRET
         sync: false
       - key: ADMIN_JWT_SECRET
@@ -82,7 +70,7 @@ services:
   # Marks abandoned pending_upload rows (form submitted, video never confirmed
   # uploaded) as EXPIRED once they're older than PENDING_UPLOAD_EXPIRY_SECONDS. Reuses
   # the same Docker image as web/worker - only the command differs. A single Python
-  # process talking to Postgres doesn't need R2/AWS credentials to do its job, but
+  # process talking to Postgres doesn't need R2 credentials to do its job, but
   # app.config.Settings requires them regardless (same typed settings module every
   # entrypoint imports), so they're still wired here.
   - type: cron
@@ -110,12 +98,6 @@ services:
         sync: false
       - key: R2_BUCKET_NAME
         sync: false
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_REGION
-        value: us-east-1
       - key: UPLOAD_TOKEN_SECRET
         sync: false
       - key: ADMIN_JWT_SECRET

@@ -61,6 +61,18 @@ def process_submission_video(submission_id: str) -> None:
             submission.video_duration_seconds = validation.duration_seconds
             submission.video_actual_size_bytes = validation.size_bytes
 
+            if not settings.REKOGNITION_ENABLED:
+                _finalize(
+                    db,
+                    submission,
+                    status=SubmissionStatus.NEEDS_REVIEW,
+                    moderation_result={
+                        "stage": "manual_review",
+                        "reason": "automated_moderation_disabled",
+                    },
+                )
+                return
+
             frames_dir = tmp_path / "frames"
             frame_paths = frame_extraction.extract_frames(video_path, validation.duration_seconds, frames_dir)
 

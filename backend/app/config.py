@@ -20,9 +20,12 @@ class Settings(BaseSettings):
     R2_ENDPOINT_URL: str
     R2_BUCKET_NAME: str
 
-    # AWS Rekognition
-    AWS_ACCESS_KEY_ID: str
-    AWS_SECRET_ACCESS_KEY: str
+    # AWS Rekognition - off by default (moderation is fully manual via the admin panel
+    # for now). Flip REKOGNITION_ENABLED once automated moderation is wanted; the AWS
+    # fields only need real values at that point.
+    REKOGNITION_ENABLED: bool = False
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
     AWS_REGION: str = "us-east-1"
 
     # Upload token (short-lived JWT authorizing the confirm-upload call)
