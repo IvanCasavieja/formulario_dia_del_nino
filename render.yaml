@@ -4,7 +4,7 @@ services:
     env: docker
     dockerfilePath: backend/Dockerfile
     dockerContext: .
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+    dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -54,7 +54,7 @@ services:
     env: docker
     dockerfilePath: backend/Dockerfile
     dockerContext: .
-    startCommand: python -m app.worker.run
+    dockerCommand: python -m app.worker.run
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -105,7 +105,7 @@ services:
     dockerfilePath: backend/Dockerfile
     dockerContext: .
     schedule: "0 * * * *"
-    startCommand: python -m app.worker.cleanup
+    dockerCommand: python -m app.worker.cleanup
     envVars:
       - key: DATABASE_URL
         fromDatabase:
