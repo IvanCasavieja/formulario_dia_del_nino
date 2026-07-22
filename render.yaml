@@ -139,8 +139,10 @@ services:
     plan: starter
     ipAllowList: []
 
-  - type: psql
-    name: formulario-db
+# Postgres databases are a separate top-level section in Render's Blueprint schema,
+# not another entry under `services` - `type: psql` there errors as "unknown type".
+databases:
+  - name: formulario-db
     # basic-256mb is the cheapest real tier - plenty for this: the videos live in R2,
     # this database only ever stores form-field rows, not the video bytes themselves.
     # Bump to basic-1gb/basic-4gb only if you see real memory pressure under load.
