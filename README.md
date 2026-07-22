@@ -223,10 +223,20 @@ credenciales en este entorno para hacerlos:
   sincronizan a Salesforce Marketing Cloud (ver arriba).
 - Selección y notificación del ganador del sorteo es 100% manual, por fuera de este
   proyecto (celular/correo) — no hay nada construido para eso, a propósito.
-- Para habilitar el envío a Salesforce: crear el "Installed Package" en Marketing Cloud,
-  la Data Extension con las columnas que espera `app/worker/salesforce_tasks.py`
-  (`SubmissionId`, `ParentFirstName`, `ParentLastName`, `ParentCedula`, `ParentEmail`,
-  `ParentPhone`, `ChildFullName`, `ChildCedula`, `Status`, `SubmittedAt` — todos string),
-  cargar las credenciales, y poner `SFMC_ENABLED=true`. Si la Data Extension real usa
-  otros nombres de columna, el único lugar que hay que tocar es `_submission_to_de_fields`
-  en ese archivo.
+- El destino en Salesforce ya existe: la Data Extension **Formulario_Video_Nino**
+  (carpeta Audiencias Segmentadas > Dia del Nino, external key
+  `7CCD02A7-AA66-48EB-94A0-EA93BC09914D`). `app/worker/salesforce_tasks.py` mapea cada
+  submission a sus columnas reales (`Nombre_Adulto`, `Apellido_Adulto`, `EmailAddress`,
+  `Celular`, `Cedula`, `Nombre_nino`, `Apellido_nino`, `Cedula_Nino`, `Term_Cond`) — si
+  la DE cambia de esquema, ese es el único lugar que hay que tocar. El campo
+  `Link_Video` que tenía la DE no se usa (el video se va a publicar directo en R2, no
+  hace falta un link en Salesforce) — si sigue existiendo como columna obligatoria en
+  la DE, hay que borrarlo o marcarlo nullable, si no el insert va a fallar.
+- Para habilitar el envío a Salesforce: crear el "Installed Package" en Marketing Cloud
+  (Setup → Apps → Installed Packages → componente API Integration, tipo
+  Server-to-Server, con permiso Read/Write sobre Data Extensions), cargar las
+  credenciales (`SFMC_SUBDOMAIN`, `SFMC_CLIENT_ID`, `SFMC_CLIENT_SECRET`,
+  `SFMC_DATA_EXTENSION_KEY` con el external key de arriba), y poner
+  `SFMC_ENABLED=true`. El request nunca se probó contra el tenant real — conviene
+  validar con un `curl` de prueba contra la DE (que hoy tiene 0 registros) antes de
+  confiar en el flujo automático.

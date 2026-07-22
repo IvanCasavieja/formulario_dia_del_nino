@@ -12,20 +12,24 @@ logger = logging.getLogger(__name__)
 
 
 def _submission_to_de_fields(submission: Submission) -> dict:
-    """Maps a Submission row to Data Extension column names. This is the one place to
-    edit if the actual Data Extension's schema uses different field names - nothing
-    else needs to change."""
+    """Maps a Submission row to the real Data Extension column names.
+
+    Target: "Formulario_Video_Nino" (folder Audiencias Segmentadas > Dia del Nino),
+    external key 7CCD02A7-AA66-48EB-94A0-EA93BC09914D - field names read straight off
+    its Attributes tab. SFMC doesn't fuzzy-match, so these must stay in sync if the DE
+    schema changes. There's no column for our internal id/status/timestamp, so those
+    aren't sent - sending a field the DE doesn't have would fail the whole insert.
+    """
     return {
-        "SubmissionId": str(submission.id),
-        "ParentFirstName": submission.parent_first_name,
-        "ParentLastName": submission.parent_last_name,
-        "ParentCedula": submission.parent_cedula,
-        "ParentEmail": submission.parent_email,
-        "ParentPhone": submission.parent_phone,
-        "ChildFullName": submission.child_full_name,
-        "ChildCedula": submission.child_cedula,
-        "Status": submission.status.value,
-        "SubmittedAt": submission.created_at.isoformat() if submission.created_at else None,
+        "Nombre_Adulto": submission.parent_first_name,
+        "Apellido_Adulto": submission.parent_last_name,
+        "EmailAddress": submission.parent_email,
+        "Celular": submission.parent_phone,
+        "Cedula": submission.parent_cedula,
+        "Nombre_nino": submission.child_first_name,
+        "Apellido_nino": submission.child_last_name,
+        "Cedula_Nino": submission.child_cedula,
+        "Term_Cond": submission.terms_accepted,
     }
 
 

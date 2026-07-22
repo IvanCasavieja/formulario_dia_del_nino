@@ -56,7 +56,8 @@ export interface AdminSubmissionListItem {
   id: string;
   parent_first_name: string;
   parent_last_name: string;
-  child_full_name: string;
+  child_first_name: string;
+  child_last_name: string;
   status: string;
   created_at: string;
 }

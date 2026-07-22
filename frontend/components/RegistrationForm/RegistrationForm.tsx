@@ -196,15 +196,21 @@ export function RegistrationForm() {
         <div className="grid gap-4 md:grid-cols-2">
           <label className={labelClass}>
             Nombre del niño o niña
-            <input {...register('child_full_name')} className={inputClass} />
-            {errors.child_full_name && <span className={errorClass}>{errors.child_full_name.message}</span>}
+            <input {...register('child_first_name')} className={inputClass} />
+            {errors.child_first_name && <span className={errorClass}>{errors.child_first_name.message}</span>}
           </label>
           <label className={labelClass}>
-            Cédula del menor
-            <input {...register('child_cedula')} className={inputClass} />
-            {errors.child_cedula && <span className={errorClass}>{errors.child_cedula.message}</span>}
+            Apellido del niño o niña
+            <input {...register('child_last_name')} className={inputClass} />
+            {errors.child_last_name && <span className={errorClass}>{errors.child_last_name.message}</span>}
           </label>
         </div>
+
+        <label className={labelClass}>
+          Cédula del menor
+          <input {...register('child_cedula')} className={inputClass} />
+          {errors.child_cedula && <span className={errorClass}>{errors.child_cedula.message}</span>}
+        </label>
 
         <Divider />
         <SectionHeading n="3" title="El video" />

@@ -29,7 +29,8 @@ export interface CreateSubmissionPayload {
   parent_cedula: string;
   parent_email: string;
   parent_phone: string;
-  child_full_name: string;
+  child_first_name: string;
+  child_last_name: string;
   child_cedula: string;
   video_content_type: string;
   video_declared_size_bytes: number;

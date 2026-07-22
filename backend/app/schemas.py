@@ -30,7 +30,8 @@ class SubmissionCreateRequest(BaseModel):
     parent_cedula: str
     parent_email: EmailStr
     parent_phone: str
-    child_full_name: str = Field(min_length=1, max_length=200)
+    child_first_name: str = Field(min_length=1, max_length=200)
+    child_last_name: str = Field(min_length=1, max_length=200)
     child_cedula: str
 
     video_content_type: str
@@ -40,7 +41,7 @@ class SubmissionCreateRequest(BaseModel):
     terms_accepted: bool
     terms_version: str = Field(min_length=1, max_length=50)
 
-    @field_validator("parent_first_name", "parent_last_name", "child_full_name")
+    @field_validator("parent_first_name", "parent_last_name", "child_first_name", "child_last_name")
     @classmethod
     def _strip_names(cls, v: str) -> str:
         v = v.strip()
@@ -121,7 +122,8 @@ class AdminSubmissionListItem(BaseModel):
     id: UUID
     parent_first_name: str
     parent_last_name: str
-    child_full_name: str
+    child_first_name: str
+    child_last_name: str
     status: SubmissionStatus
     created_at: datetime
 
@@ -135,7 +137,8 @@ class AdminSubmissionDetail(BaseModel):
     parent_cedula: str
     parent_email: str
     parent_phone: str
-    child_full_name: str
+    child_first_name: str
+    child_last_name: str
     child_cedula: str
     video_content_type: str
     video_actual_size_bytes: int | None

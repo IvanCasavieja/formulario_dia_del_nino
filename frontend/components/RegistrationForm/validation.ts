@@ -15,7 +15,8 @@ export const registrationSchema = z.object({
     const digits = onlyDigits(value);
     return digits.length >= constants.PHONE_MIN_DIGITS && digits.length <= constants.PHONE_MAX_DIGITS;
   }, "El teléfono debe tener entre 8 y 15 dígitos"),
-  child_full_name: z.string().trim().min(1, "Ingresa el nombre del niño o niña").max(200),
+  child_first_name: z.string().trim().min(1, "Ingresa el nombre del niño o niña").max(200),
+  child_last_name: z.string().trim().min(1, "Ingresa el apellido del niño o niña").max(200),
   child_cedula: z.string().trim().min(1, "Ingresa la cédula del menor").refine((value) => {
     const digits = onlyDigits(value);
     return digits.length >= constants.CHILD_CEDULA_MIN_DIGITS && digits.length <= constants.CHILD_CEDULA_MAX_DIGITS;

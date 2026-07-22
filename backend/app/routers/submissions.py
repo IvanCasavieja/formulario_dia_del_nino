@@ -28,7 +28,8 @@ def _apply_fields(submission: Submission, payload: SubmissionCreateRequest, clie
     submission.parent_cedula = payload.parent_cedula
     submission.parent_email = payload.parent_email
     submission.parent_phone = payload.parent_phone
-    submission.child_full_name = payload.child_full_name
+    submission.child_first_name = payload.child_first_name
+    submission.child_last_name = payload.child_last_name
     submission.child_cedula = payload.child_cedula
     submission.video_key = video_key
     submission.video_content_type = payload.video_content_type

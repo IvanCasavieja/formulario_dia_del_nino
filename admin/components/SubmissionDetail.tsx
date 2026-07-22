@@ -71,7 +71,7 @@ export function SubmissionDetail({ submissionId, onClose, onDecided }: Props) {
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <dt className="text-zinc-500">Niño/a</dt>
               <dd className="text-zinc-900">
-                {detail.child_full_name} ({detail.child_cedula})
+                {detail.child_first_name} {detail.child_last_name} ({detail.child_cedula})
               </dd>
               <dt className="text-zinc-500">Padre/Madre</dt>
               <dd className="text-zinc-900">

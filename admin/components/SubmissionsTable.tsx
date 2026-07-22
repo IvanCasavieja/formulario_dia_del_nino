@@ -27,7 +27,9 @@ export function SubmissionsTable({ submissions, onSelect }: Props) {
         <tbody>
           {submissions.map((submission) => (
             <tr key={submission.id} className="border-b border-zinc-100 last:border-0">
-              <td className="px-4 py-3">{submission.child_full_name}</td>
+              <td className="px-4 py-3">
+                {submission.child_first_name} {submission.child_last_name}
+              </td>
               <td className="px-4 py-3">
                 {submission.parent_first_name} {submission.parent_last_name}
               </td>

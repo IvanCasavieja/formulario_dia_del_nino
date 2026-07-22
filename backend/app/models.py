@@ -33,7 +33,8 @@ class Submission(Base):
     parent_phone: Mapped[str] = mapped_column(String, nullable=False)
 
     # Child
-    child_full_name: Mapped[str] = mapped_column(String, nullable=False)
+    child_first_name: Mapped[str] = mapped_column(String, nullable=False)
+    child_last_name: Mapped[str] = mapped_column(String, nullable=False)
     child_cedula: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
 
     # Video
