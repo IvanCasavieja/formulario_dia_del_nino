@@ -29,6 +29,7 @@ docs and cost real trial and error:
   vanishing (this is exactly how the NULL Link_Video rejection surfaced originally).
 """
 import time
+from urllib.parse import quote
 
 import httpx
 
@@ -60,6 +61,21 @@ def _rows_url() -> str:
 
 def _rowset_url() -> str:
     return f"{_rest_base_url()}/data/v1/customobjectdata/key/{settings.SFMC_DATA_EXTENSION_KEY}/rowset"
+
+
+def _build_rowset_url(filter_expr: str | None = None, page_size: int | None = None) -> str:
+    """Appends $filter/$pageSize as a manually-built, pre-encoded query string instead
+    of passing them through httpx's `params=` dict. Mashery (SFMC's API gateway)
+    rejects a `+`-encoded space in $filter outright - "request parameter $filter could
+    not be resolved" (errorcode 10003) - it only accepts %20, but httpx's dict-based
+    params encode spaces as `+`. quote() (not quote_plus()) defaults to %20."""
+    query_parts = []
+    if filter_expr:
+        query_parts.append(f"$filter={quote(filter_expr, safe='')}")
+    if page_size:
+        query_parts.append(f"$pageSize={page_size}")
+    query = "&".join(query_parts)
+    return f"{_rowset_url()}?{query}" if query else _rowset_url()
 
 
 def _require_enabled() -> None:
@@ -165,13 +181,9 @@ def get_row_by_cedula_nino(cedula_nino: str) -> dict | None:
     _require_enabled()
     token = _get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
+    url = _build_rowset_url(filter_expr=f"cedula_nino eq '{cedula_nino}'")
     try:
-        response = httpx.get(
-            _rowset_url(),
-            params={"$filter": f"cedula_nino eq '{cedula_nino}'"},
-            headers=headers,
-            timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS,
-        )
+        response = httpx.get(url, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
     except httpx.HTTPError as e:
         detail = e.response.text if isinstance(e, httpx.HTTPStatusError) else str(e)
@@ -187,13 +199,10 @@ def list_rows(status: str | None = None, limit: int = 200) -> list[dict]:
     _require_enabled()
     token = _get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
-    params: dict = {"$pageSize": limit}
-    if status:
-        params["$filter"] = f"status eq '{status}'"
+    filter_expr = f"status eq '{status}'" if status else None
+    url = _build_rowset_url(filter_expr=filter_expr, page_size=limit)
     try:
-        response = httpx.get(
-            _rowset_url(), params=params, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS
-        )
+        response = httpx.get(url, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
     except httpx.HTTPError as e:
         detail = e.response.text if isinstance(e, httpx.HTTPStatusError) else str(e)
