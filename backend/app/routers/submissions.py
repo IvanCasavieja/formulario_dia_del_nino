@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -12,7 +12,12 @@ from app.db import get_db
 from app.models import Submission, SubmissionStatus
 from app.rate_limit import limiter
 from app.schemas import SubmissionCreateRequest, SubmissionCreateResponse, SubmissionStatusResponse
-from app.worker.queue import enqueue_salesforce_sync, enqueue_submission_processing
+
+# TEMP (free tier, no Redis/worker service - revert once on a paid plan): calling the
+# task functions directly instead of enqueueing to app.worker.queue. No retries, no
+# on_failure recording - see confirm_upload below.
+from app.worker.salesforce_tasks import sync_submission_to_salesforce
+from app.worker.tasks import process_submission_video
 
 settings = get_settings()
 router = APIRouter(prefix="/api/submissions", tags=["submissions"])
@@ -102,6 +107,7 @@ def _extract_bearer_token(authorization: str | None) -> str:
 def confirm_upload(
     request: Request,
     submission_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -143,13 +149,19 @@ def confirm_upload(
     submission.video_actual_size_bytes = submission.video_declared_size_bytes  # TEMP: ver arriba
     db.commit()
 
-    enqueue_submission_processing(str(submission.id))
+    # TEMP (free tier, no Redis/worker service - revert to enqueue_submission_processing
+    # once on a paid plan): runs in-process after the response is sent, via FastAPI's
+    # BackgroundTasks instead of RQ. No automatic retries, and a failure here doesn't
+    # get recorded anywhere (on_submission_failure is an RQ-only callback) - it just
+    # raises in server logs. Fine for a demo, not for real traffic.
+    background_tasks.add_task(process_submission_video, str(submission.id))
 
     if settings.SFMC_ENABLED:
         # Fires right here per spec: Salesforce gets the raw submission data as soon as
         # the video upload is confirmed, not after moderation runs. Best-effort/never
-        # blocks - failures only show up as salesforce_sync_error in the admin panel.
-        enqueue_salesforce_sync(str(submission.id))
+        # blocks - failures only show up as salesforce_sync_error in the admin panel
+        # (only true for the real enqueue_salesforce_sync path - see TEMP note above).
+        background_tasks.add_task(sync_submission_to_salesforce, str(submission.id))
 
     return {"status": "processing"}
 
