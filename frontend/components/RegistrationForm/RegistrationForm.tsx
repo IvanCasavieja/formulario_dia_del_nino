@@ -175,6 +175,7 @@ export function RegistrationForm() {
           <label className={labelClass}>
             Cédula del padre/madre/tutor
             <input {...register('parent_cedula')} className={inputClass} />
+            <span className="text-xs text-ink-soft">Puede tener 7 u 8 dígitos. Si la tuya tiene 8, escribilos todos.</span>
             {errors.parent_cedula && <span className={errorClass}>{errors.parent_cedula.message}</span>}
           </label>
           <label className={labelClass}>
@@ -209,6 +210,7 @@ export function RegistrationForm() {
         <label className={labelClass}>
           Cédula del menor
           <input {...register('child_cedula')} className={inputClass} />
+          <span className="text-xs text-ink-soft">Puede tener 7 u 8 dígitos. Si la del menor tiene 8, escribilos todos.</span>
           {errors.child_cedula && <span className={errorClass}>{errors.child_cedula.message}</span>}
         </label>
 

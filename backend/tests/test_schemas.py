@@ -45,6 +45,13 @@ def test_bad_cedula_length_rejected():
         SubmissionCreateRequest(**_valid_payload(child_cedula="123"))
 
 
+def test_cedula_starting_with_zero_rejected():
+    with pytest.raises(ValidationError):
+        SubmissionCreateRequest(**_valid_payload(child_cedula="0765432"))
+    with pytest.raises(ValidationError):
+        SubmissionCreateRequest(**_valid_payload(parent_cedula="01234567"))
+
+
 def test_disallowed_video_type_rejected():
     with pytest.raises(ValidationError):
         SubmissionCreateRequest(**_valid_payload(video_content_type="video/avi"))

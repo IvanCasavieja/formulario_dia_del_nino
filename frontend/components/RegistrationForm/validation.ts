@@ -9,7 +9,7 @@ export const registrationSchema = z.object({
   parent_cedula: z.string().trim().min(1, "Ingresa la cédula").refine((value) => {
     const digits = onlyDigits(value);
     return digits.length >= constants.PARENT_CEDULA_MIN_DIGITS && digits.length <= constants.PARENT_CEDULA_MAX_DIGITS;
-  }, "La cédula debe tener entre 7 y 8 dígitos"),
+  }, "La cédula debe tener entre 7 y 8 dígitos").refine((value) => !onlyDigits(value).startsWith("0"), "La cédula no puede empezar con 0"),
   parent_email: z.string().trim().email("Ingresa un correo válido"),
   parent_phone: z.string().trim().min(1, "Ingresa un teléfono").refine((value) => {
     const digits = onlyDigits(value);
@@ -20,7 +20,7 @@ export const registrationSchema = z.object({
   child_cedula: z.string().trim().min(1, "Ingresa la cédula del menor").refine((value) => {
     const digits = onlyDigits(value);
     return digits.length >= constants.CHILD_CEDULA_MIN_DIGITS && digits.length <= constants.CHILD_CEDULA_MAX_DIGITS;
-  }, "La cédula del menor debe tener entre 7 y 8 dígitos"),
+  }, "La cédula del menor debe tener entre 7 y 8 dígitos").refine((value) => !onlyDigits(value).startsWith("0"), "La cédula del menor no puede empezar con 0"),
   video_content_type: z.string().refine((value) => constants.ALLOWED_VIDEO_MIME_TYPES.includes(value), "Formato no soportado"),
   video_declared_size_bytes: z.number().int().positive().max(constants.MAX_VIDEO_SIZE_BYTES, "El video no puede superar 200 MB"),
   video_declared_duration_seconds: z.number().positive().max(constants.MAX_VIDEO_DURATION_SECONDS + constants.MAX_VIDEO_DURATION_TOLERANCE_SECONDS, "El video no puede superar los 60 segundos"),

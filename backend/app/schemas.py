@@ -21,6 +21,8 @@ def _validate_cedula(value: str, min_digits: int, max_digits: int, field_name: s
         raise ValueError(
             f"{field_name} debe tener entre {min_digits} y {max_digits} dígitos"
         )
+    if digits.startswith("0"):
+        raise ValueError(f"{field_name} no puede empezar con 0")
     return digits
 
 
