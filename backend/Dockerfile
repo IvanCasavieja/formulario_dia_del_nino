@@ -1,8 +1,8 @@
 FROM python:3.12-slim
 
-# ffmpeg/ffprobe are required by the moderation pipeline (frame extraction + duration/
-# format checks). Render's plain Python buildpack doesn't include them, which is why
-# this project deploys via Docker rather than a native buildpack.
+# ffprobe (part of the ffmpeg package) is required by the server-side video validation
+# (duration/size/format checks). Render's plain Python buildpack doesn't include it,
+# which is why this project deploys via Docker rather than a native buildpack.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*

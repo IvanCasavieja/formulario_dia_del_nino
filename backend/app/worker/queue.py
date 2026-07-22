@@ -11,8 +11,7 @@ moderation_queue = Queue("moderation", connection=redis_conn)
 
 def enqueue_submission_processing(submission_id: str) -> None:
     """Enqueues by dotted string path (not a direct import) so the web process doesn't
-    need to pull in the worker's heavier deps (ffmpeg calls, Rekognition client) just to
-    hand off a job."""
+    need to pull in the worker's heavier deps (ffprobe calls) just to hand off a job."""
     moderation_queue.enqueue(
         "app.worker.tasks.process_submission_video",
         submission_id,

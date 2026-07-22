@@ -20,14 +20,6 @@ class Settings(BaseSettings):
     R2_ENDPOINT_URL: str
     R2_BUCKET_NAME: str
 
-    # AWS Rekognition - off by default (moderation is fully manual via the admin panel
-    # for now). Flip REKOGNITION_ENABLED once automated moderation is wanted; the AWS
-    # fields only need real values at that point.
-    REKOGNITION_ENABLED: bool = False
-    AWS_ACCESS_KEY_ID: str | None = None
-    AWS_SECRET_ACCESS_KEY: str | None = None
-    AWS_REGION: str = "us-east-1"
-
     # Upload token (short-lived JWT authorizing the confirm-upload call)
     UPLOAD_TOKEN_SECRET: str
     UPLOAD_TOKEN_TTL_SECONDS: int = 1800  # 30 min
@@ -47,13 +39,6 @@ class Settings(BaseSettings):
     RATE_LIMIT_SUBMIT: str = "5/hour"
     RATE_LIMIT_CONFIRM_UPLOAD: str = "20/hour"
     RATE_LIMIT_ADMIN_LOGIN: str = "5/minute"
-
-    # Moderation thresholds
-    MODERATION_REJECT_CATEGORIES: str = "Explicit Nudity,Violence,Visually Disturbing,Drugs,Hate Symbols"
-    MODERATION_REJECT_CONFIDENCE: float = 90.0
-    MODERATION_REVIEW_CONFIDENCE: float = 50.0
-    MODERATION_MIN_CONFIDENCE_FLOOR: float = 40.0  # passed to Rekognition as MinConfidence
-    MODERATION_FRAME_COUNT: int = 5
 
     # What to do when ffprobe/server-side validation itself fails unexpectedly
     # (corrupt file vs. tool crash are hard to fully distinguish) - default errs safe (reject),
@@ -75,10 +60,6 @@ class Settings(BaseSettings):
     SFMC_DATA_EXTENSION_KEY: str | None = None  # External Key of the target Data Extension
     SFMC_SYNC_RETRY_MAX: int = 3
     SFMC_REQUEST_TIMEOUT_SECONDS: float = 15.0
-
-    @property
-    def moderation_reject_categories_list(self) -> list[str]:
-        return [c.strip() for c in self.MODERATION_REJECT_CATEGORIES.split(",") if c.strip()]
 
     @property
     def cors_allow_origins_list(self) -> list[str]:

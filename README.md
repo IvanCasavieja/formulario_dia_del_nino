@@ -19,11 +19,12 @@ real de pauta paga desde el día uno.
 - **Storage de video**: Cloudflare R2 (S3-compatible). El navegador sube el video
   directo a R2 con una URL pre-firmada — nunca pasa por el backend.
 - **Base de datos**: PostgreSQL.
-- **Cola**: Redis + RQ, para el procesamiento de moderación en background (un worker
-  separado del proceso web).
-- **Moderación**: se extraen 4-5 frames del video con `ffmpeg` y se corren por AWS
-  Rekognition (`DetectModerationLabels`, API de imagen) — nunca se copia el video a un
-  bucket S3 de AWS.
+- **Cola**: Redis + RQ, para el procesamiento en background (un worker separado del
+  proceso web).
+- **Moderación**: 100% manual. El worker solo revalida formato/duración/tamaño con
+  `ffprobe` sobre el archivo real; todo lo que pasa esa validación cae en
+  `needs_review` y espera aprobación desde el panel de admin. No hay moderación
+  automática de contenido.
 - **Validaciones reales de duración/tamaño/formato ocurren en el worker**, no solo en
   el navegador: una URL pre-firmada de PUT no puede hacer cumplir un tamaño máximo por
   sí sola, así que el navegador es solo la primera línea de defensa (para no hacerle
@@ -63,7 +64,6 @@ Copiar [backend/.env.example](backend/.env.example) a `backend/.env` y completar
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Credenciales de un API token de Cloudflare R2 con permisos de lectura/escritura sobre el bucket |
 | `R2_ENDPOINT_URL` | `https://<account_id>.r2.cloudflarestorage.com` |
 | `R2_BUCKET_NAME` | Bucket donde se guardan los videos |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | Credenciales de un usuario de IAM **solo** para Rekognition (ver política abajo) |
 | `UPLOAD_TOKEN_SECRET` | Secreto para firmar el JWT de subida (`python backend/scripts/generate_secret.py`) |
 | `ADMIN_JWT_SECRET` | Secreto para firmar la sesión de admin — **distinto** del anterior |
 | `ADMIN_PASSWORD_HASH` | Hash bcrypt de la contraseña de admin (`python backend/scripts/generate_admin_password_hash.py`) |
@@ -72,8 +72,8 @@ Copiar [backend/.env.example](backend/.env.example) a `backend/.env` y completar
 | `SFMC_SUBDOMAIN` / `SFMC_CLIENT_ID` / `SFMC_CLIENT_SECRET` / `SFMC_ACCOUNT_ID` | Credenciales del "Installed Package" (API Integration, server-to-server) creado en Marketing Cloud |
 | `SFMC_DATA_EXTENSION_KEY` | External Key de la Data Extension donde se insertan las inscripciones |
 
-El resto de las variables (`RATE_LIMIT_*`, `MODERATION_*`, TTLs) tienen defaults
-razonables en `backend/app/config.py` — no hace falta tocarlas para levantar el proyecto.
+El resto de las variables (`RATE_LIMIT_*`, TTLs) tienen defaults razonables en
+`backend/app/config.py` — no hace falta tocarlas para levantar el proyecto.
 
 Para cada frontend (son proyectos separados, cada uno con su propio `.env.local`):
 `frontend/.env.local` y `admin/.env.local`, ambos con
@@ -174,7 +174,7 @@ propio).
 
 ## Pasos manuales que no se pueden automatizar desde acá
 
-Estos requieren acceso a las consolas de Cloudflare/AWS/Render/Vercel — no hay
+Estos requieren acceso a las consolas de Cloudflare/Render/Vercel — no hay
 credenciales en este entorno para hacerlos:
 
 1. **Crear el bucket de R2** y un API token con permisos de lectura/escritura sobre
@@ -196,30 +196,12 @@ credenciales en este entorno para hacerlos:
      }
    ]
    ```
-3. **(Opcional, no bloquea el lanzamiento) Crear un usuario de IAM en AWS** solo para
-   Rekognition, con esta política de mínimo privilegio (el `Resource: "*"` es correcto
-   acá — Rekognition no soporta scoping por recurso en esta API). La moderación es
-   100% manual por ahora (`REKOGNITION_ENABLED=false` por defecto en
-   `backend/app/config.py`) — este paso solo hace falta si más adelante se decide
-   automatizarla:
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Action": ["rekognition:DetectModerationLabels"],
-         "Resource": "*"
-       }
-     ]
-   }
-   ```
-4. **Generar los secretos y el hash de la contraseña de admin** (scripts en
+3. **Generar los secretos y el hash de la contraseña de admin** (scripts en
    `backend/scripts/`) y cargarlos como variables de entorno en Render — nunca en el
    repo.
-5. **Importar `render.yaml` como Blueprint en Render** y completar las variables
+4. **Importar `render.yaml` como Blueprint en Render** y completar las variables
    `sync: false`.
-6. **Conectar el repo a Vercel dos veces** (dos proyectos, uno con Root Directory
+5. **Conectar el repo a Vercel dos veces** (dos proyectos, uno con Root Directory
    `frontend` y otro con Root Directory `admin`), configurar `NEXT_PUBLIC_API_BASE_URL`
    en ambos, y más adelante apuntar el subdominio que asigne Tienda Inglesa al proyecto
    del `frontend`.
@@ -233,13 +215,9 @@ credenciales en este entorno para hacerlos:
   (no hay cuentas de usuario) — pensado para un equipo chico de marketing revisando una
   campaña puntual. Al ser una app separada de la pública, conviene no indexarla ni
   enlazarla desde ningún lado público (ya tiene `robots: noindex` seteado).
-- Moderación 100% manual por ahora (`REKOGNITION_ENABLED=false`): todo video que pasa
-  la validación server-side (formato/duración/tamaño) cae en `needs_review` y espera
-  aprobación desde el panel de admin. La moderación automática con Rekognition
-  (`rejected`/`approved` según `MODERATION_REJECT_CONFIDENCE` /
-  `MODERATION_REVIEW_CONFIDENCE` en `backend/app/config.py`) sigue implementada y
-  probada, lista para activarse con `REKOGNITION_ENABLED=true` el día que se decida
-  automatizar.
+- Moderación 100% manual: todo video que pasa la validación server-side
+  (formato/duración/tamaño) cae en `needs_review` y espera aprobación desde el panel
+  de admin. No hay moderación automática de contenido.
 - Retención de datos: los registros (aprobados, rechazados o lo que sea) quedan
   indefinidamente en Postgres — no hay borrado automático, según confirmaron. Además se
   sincronizan a Salesforce Marketing Cloud (ver arriba).

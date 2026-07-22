@@ -7,8 +7,7 @@ from app import r2
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Submission, SubmissionStatus
-from app.rekognition import detect_moderation_labels
-from app.services import frame_extraction, moderation_rules, video_validation
+from app.services import video_validation
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -61,39 +60,13 @@ def process_submission_video(submission_id: str) -> None:
             submission.video_duration_seconds = validation.duration_seconds
             submission.video_actual_size_bytes = validation.size_bytes
 
-            if not settings.REKOGNITION_ENABLED:
-                _finalize(
-                    db,
-                    submission,
-                    status=SubmissionStatus.NEEDS_REVIEW,
-                    moderation_result={
-                        "stage": "manual_review",
-                        "reason": "automated_moderation_disabled",
-                    },
-                )
-                return
-
-            frames_dir = tmp_path / "frames"
-            frame_paths = frame_extraction.extract_frames(video_path, validation.duration_seconds, frames_dir)
-
-            per_frame_labels = [detect_moderation_labels(p.read_bytes()) for p in frame_paths]
-            aggregated = moderation_rules.aggregate_labels(per_frame_labels)
-            decision = moderation_rules.decide(aggregated)
-
             _finalize(
                 db,
                 submission,
-                status=SubmissionStatus(decision.status),
+                status=SubmissionStatus.NEEDS_REVIEW,
                 moderation_result={
-                    "stage": "rekognition",
-                    "reason": decision.reason,
-                    "frame_count": len(frame_paths),
-                    "triggered_labels": decision.triggered_labels,
-                    "thresholds": {
-                        "reject_confidence": settings.MODERATION_REJECT_CONFIDENCE,
-                        "review_confidence": settings.MODERATION_REVIEW_CONFIDENCE,
-                        "reject_categories": settings.moderation_reject_categories_list,
-                    },
+                    "stage": "manual_review",
+                    "reason": "passed_server_side_validation",
                 },
             )
     finally:
@@ -108,8 +81,8 @@ def _finalize(db, submission: Submission, status: SubmissionStatus, moderation_r
 
 def on_submission_failure(job, connection, type, value, traceback) -> None:
     """RQ on_failure callback, invoked once retries are exhausted. Without this, a
-    submission that keeps hitting transient errors (R2/Rekognition throttling, etc.)
-    would stay stuck at PROCESSING forever with no way for admins to notice."""
+    submission that keeps hitting transient errors (R2 throttling, etc.) would stay
+    stuck at PROCESSING forever with no way for admins to notice."""
     submission_id = job.args[0]
     db = SessionLocal()
     try:
