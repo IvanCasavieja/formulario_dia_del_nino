@@ -106,10 +106,9 @@ export function RegistrationForm() {
   const onSubmit = async (values: RegistrationFormValues) => {
     setSubmissionError(null);
 
-    // The video fields live in the same zod schema as the rest of the form so a
-    // missing/invalid video blocks handleSubmit like any other field - but zod's
-    // generic "required" message on those hidden fields would otherwise say nothing
-    // useful to the user, so this is surfaced as its own explicit message instead.
+    // Defense-in-depth: handleFormSubmit below already blocks this case before
+    // react-hook-form's own validation runs, but keep the guard here too in case
+    // selectedFile/resolvedContentType ever gets out of sync with the form state.
     if (!selectedFile || !resolvedContentType) {
       setVideoRequiredError('Debes seleccionar un video para continuar.');
       return;
@@ -124,6 +123,21 @@ export function RegistrationForm() {
     } catch (error) {
       setSubmissionError(error instanceof ApiError ? error.message : 'Hubo un problema. Intenta nuevamente.');
     }
+  };
+
+  const submitForm = handleSubmit(onSubmit);
+
+  // Runs before react-hook-form's own validation. Without this, submitting with no
+  // file selected leaves video_content_type/size/duration undefined, zod rejects the
+  // whole form on those hidden fields, handleSubmit never calls onSubmit, and nothing
+  // visible happens - no error anywhere, just a click that does nothing.
+  const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    if (!selectedFile || !resolvedContentType) {
+      event.preventDefault();
+      setVideoRequiredError('Debes seleccionar un video para continuar.');
+      return;
+    }
+    submitForm(event);
   };
 
   const inputClass =
@@ -155,7 +169,7 @@ export function RegistrationForm() {
         <p className="font-display text-xs font-medium uppercase tracking-[0.3em] text-blue-light">Formulario de inscripción</p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6 p-6 sm:p-8">
+      <form onSubmit={handleFormSubmit} className="flex flex-col gap-6 p-6 sm:p-8">
         <SectionHeading n="1" title="Quién completa el formulario" />
 
         <div className="grid gap-4 md:grid-cols-2">
