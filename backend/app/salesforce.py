@@ -1,22 +1,32 @@
 """Salesforce Marketing Cloud REST API client: OAuth2 client-credentials auth against
-an Installed Package, then a row insert into a Data Extension by External Key.
+an Installed Package, then row operations against a Data Extension by External Key.
 
-Endpoint and payload shape verified live against the real tenant (Formulario_Nino
-package, Formulario_Video_Nino DE) - see backend/scripts/test_salesforce_sync.py.
-Two things that aren't obvious from Salesforce's docs and cost real trial and error:
+This Data Extension (Formulario_Video_Nino) is the ONLY persistent store for this
+project - there is no database. Personal data (name, cedula, email, phone) must never
+be written anywhere else. Cedula_Nino is the DE's primary key (one entry per child,
+not per adult - the same parent can have two kids each entering separately), so every
+row operation here is keyed by it.
 
-- The row-insert endpoint is the *async* one (`/data/v1/async/dataextensions/key:...`).
-  There's no working synchronous equivalent for this API generation - `.../data/v1/
-  dataextensions/key:.../rows` (without "async") 404s, and the older `/data/v1/
-  customobjectdata/key/.../rowset` only supports GET, not POST.
+Endpoint/payload shapes verified live against the real tenant - see
+backend/scripts/test_salesforce_sync.py. Notes that aren't obvious from Salesforce's
+docs and cost real trial and error:
+
+- Row insert/update goes through the *async* endpoint
+  (`/data/v1/async/dataextensions/key:.../rows`). There's no working synchronous
+  equivalent for this API generation - the same path without "async" 404s, and the
+  older `/data/v1/customobjectdata/key/.../rowset` only supports GET, not POST/PUT.
 - Each item in "items" is the field values directly (`{"ColumnName": value, ...}`) -
-  no "values" or "keys" wrapper. Wrapping it (as a first attempt did) fails with a
-  JSON deserialization error at exactly that key.
-
-Because it's async, a 202 only means "queued", not "inserted" - see the NULL
-Link_Video rejection below, which returned 202 and only surfaced as an error on the
-results endpoint. insert_data_extension_row polls status/results so a rejected row
-surfaces as a real SalesforceSyncError instead of a false-positive salesforce_synced_at.
+  no "values"/"keys" wrapper; wrapping it fails with a JSON deserialization error.
+- POST inserts (fails if Cedula_Nino already exists); PUT upserts (updates the row
+  matching the primary key, inserts if none matches) - but PUT silently returns an
+  *async result* error (not an HTTP error) if the DE has no primary key defined at
+  all: "This Data Extension does not have any primary keys defined."
+- Retrieve (`GET .../rowset`) returns lowercase field names in `values`, and supports
+  `$filter` on any column (not only the primary key) even though this DE is not
+  "sendable".
+- Because writes are async, a `202` only means "queued". insert/upsert here poll
+  status/results so a rejected row raises SalesforceSyncError instead of silently
+  vanishing (this is exactly how the NULL Link_Video rejection surfaced originally).
 """
 import time
 
@@ -44,11 +54,22 @@ def _rest_base_url() -> str:
     return f"https://{settings.SFMC_SUBDOMAIN}.rest.marketingcloudapis.com"
 
 
+def _rows_url() -> str:
+    return f"{_rest_base_url()}/data/v1/async/dataextensions/key:{settings.SFMC_DATA_EXTENSION_KEY}/rows"
+
+
+def _rowset_url() -> str:
+    return f"{_rest_base_url()}/data/v1/customobjectdata/key/{settings.SFMC_DATA_EXTENSION_KEY}/rowset"
+
+
+def _require_enabled() -> None:
+    if not settings.SFMC_ENABLED:
+        raise SalesforceSyncError("SFMC_ENABLED is false - refusing to call a possibly-unconfigured integration")
+
+
 def _get_access_token() -> str:
     """Client-credentials grant. Tokens are cached in-process and reused until ~30s
-    before expiry (SFMC tokens are typically valid ~20 minutes) - fine for a worker
-    process handling one submission at a time; a shared cache across processes isn't
-    worth the complexity at this volume."""
+    before expiry (SFMC tokens are typically valid ~20 minutes)."""
     now = time.monotonic()
     cached_token = _token_cache["access_token"]
     cached_expiry = _token_cache["expires_at"]
@@ -80,60 +101,128 @@ def _get_access_token() -> str:
 
 
 def _poll_request_result(request_id: str, headers: dict) -> None:
-    """Polls the async request until it's Complete, then raises if the row was
-    rejected. completionDateTime landed ~0.5-2s after callDateTime in testing, so
-    _POLL_ATTEMPTS/_POLL_INTERVAL_SECONDS leaves comfortable headroom under the
-    job's 60s RQ timeout without hammering the API.
-
-    Right after the POST, the status record often isn't indexed yet - the endpoint
-    returns 200 with an "AsyncRequestStatusNotFound" resultMessage instead of a
-    "status" key, not an error. That's treated the same as "not ready, keep polling".
-    """
+    """Polls the async request until it's Complete, then raises if the row write was
+    rejected. Right after the POST/PUT, the status record often isn't indexed yet -
+    the endpoint returns 200 with an "AsyncRequestStatusNotFound" resultMessage
+    instead of a "status" key, not an error - that's treated as "not ready, retry"."""
     status_url = f"{_rest_base_url()}/data/v1/async/{request_id}/status"
 
     for _ in range(_POLL_ATTEMPTS):
         response = httpx.get(status_url, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
-        body = response.json()
-        status = body.get("status")
-        if status is not None and status["requestStatus"] == "Complete":
-            if not status["hasErrors"]:
+        req_status = response.json().get("status") or {}
+        if req_status.get("requestStatus") == "Complete":
+            if not req_status.get("hasErrors"):
                 return
             results_url = f"{_rest_base_url()}/data/v1/async/{request_id}/results"
             results = httpx.get(results_url, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS)
             results.raise_for_status()
-            messages = [item.get("message") for item in results.json().get("items", []) if item.get("status") == "Error"]
-            raise SalesforceSyncError(f"row insert rejected: {'; '.join(messages) or results.text}")
+            messages = [
+                item.get("message") for item in results.json().get("items", []) if item.get("status") == "Error"
+            ]
+            raise SalesforceSyncError(f"row write rejected: {'; '.join(messages) or results.text}")
         time.sleep(_POLL_INTERVAL_SECONDS)
 
-    raise SalesforceSyncError(f"row insert timed out waiting for async result (requestId={request_id})")
+    raise SalesforceSyncError(f"row write timed out waiting for async result (requestId={request_id})")
 
 
-def insert_data_extension_row(fields: dict) -> None:
-    """Inserts one row into the configured Data Extension.
-
-    `fields` keys must match the Data Extension's column names exactly - SFMC doesn't
-    fuzzy-match. See worker/salesforce_tasks.py for the submission -> fields mapping,
-    which is the one place to adjust if the target Data Extension's schema differs.
-    """
-    if not settings.SFMC_ENABLED:
-        raise SalesforceSyncError("SFMC_ENABLED is false - refusing to call a possibly-unconfigured integration")
-
+def insert_row(fields: dict) -> None:
+    """Inserts a new row. Fails if Cedula_Nino (the primary key) already exists."""
+    _require_enabled()
     token = _get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
-    url = f"{_rest_base_url()}/data/v1/async/dataextensions/key:{settings.SFMC_DATA_EXTENSION_KEY}/rows"
-
     try:
         response = httpx.post(
-            url,
-            json={"items": [fields]},
+            _rows_url(), json={"items": [fields]}, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        detail = e.response.text if isinstance(e, httpx.HTTPStatusError) else str(e)
+        raise SalesforceSyncError(f"row insert request failed: {detail}") from e
+    _poll_request_result(response.json()["requestId"], headers)
+
+
+def upsert_row(fields: dict) -> None:
+    """Inserts or updates a row, matched by Cedula_Nino (the DE's primary key).
+    `fields` must include Cedula_Nino."""
+    _require_enabled()
+    token = _get_access_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        response = httpx.put(
+            _rows_url(), json={"items": [fields]}, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        detail = e.response.text if isinstance(e, httpx.HTTPStatusError) else str(e)
+        raise SalesforceSyncError(f"row upsert request failed: {detail}") from e
+    _poll_request_result(response.json()["requestId"], headers)
+
+
+def get_row_by_cedula_nino(cedula_nino: str) -> dict | None:
+    """Looks up a single row by the child's cedula. Returns the row's values
+    (lowercase field names, as SFMC returns them) or None if it doesn't exist."""
+    _require_enabled()
+    token = _get_access_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        response = httpx.get(
+            _rowset_url(),
+            params={"$filter": f"cedula_nino eq '{cedula_nino}'"},
             headers=headers,
             timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
     except httpx.HTTPError as e:
         detail = e.response.text if isinstance(e, httpx.HTTPStatusError) else str(e)
-        raise SalesforceSyncError(f"row insert request failed: {detail}") from e
+        raise SalesforceSyncError(f"row lookup failed: {detail}") from e
+    items = response.json().get("items", [])
+    return items[0]["values"] if items else None
 
-    request_id = response.json()["requestId"]
-    _poll_request_result(request_id, headers)
+
+def list_rows(status: str | None = None, limit: int = 200) -> list[dict]:
+    """Lists rows, optionally filtered by Status. This DE is the only store the admin
+    panel has to query. Non-sendable DEs cap out around 200 rows per call - fine at
+    this volume, would need real pagination past that."""
+    _require_enabled()
+    token = _get_access_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    params: dict = {"$pageSize": limit}
+    if status:
+        params["$filter"] = f"status eq '{status}'"
+    try:
+        response = httpx.get(
+            _rowset_url(), params=params, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        detail = e.response.text if isinstance(e, httpx.HTTPStatusError) else str(e)
+        raise SalesforceSyncError(f"row list failed: {detail}") from e
+    return [item["values"] for item in response.json().get("items", [])]
+
+
+def build_row_fields(
+    *,
+    parent_first_name: str,
+    parent_last_name: str,
+    parent_cedula: str,
+    parent_email: str,
+    parent_phone: str,
+    child_first_name: str,
+    child_last_name: str,
+    child_cedula: str,
+    terms_accepted: bool,
+) -> dict:
+    """Maps our internal field names to the DE's actual column names. The one place
+    to edit if the DE's schema changes - SFMC doesn't fuzzy-match column names."""
+    return {
+        "Nombre_Adulto": parent_first_name,
+        "Apellido_Adulto": parent_last_name,
+        "Cedula": parent_cedula,
+        "EmailAddress": parent_email,
+        "Celular": parent_phone,
+        "Nombre_nino": child_first_name,
+        "Apellido_nino": child_last_name,
+        "Cedula_Nino": child_cedula,
+        "Term_Cond": terms_accepted,
+    }

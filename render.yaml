@@ -1,10 +1,14 @@
+# Salesforce Marketing Cloud is the only persistent store for this project - there is
+# no database, by explicit requirement (personal/child data must never live anywhere
+# except the Data Extension). See app/salesforce.py.
+#
 # TEMP (free tier for now, no card on file - revert once on a paid plan): this
 # blueprint normally also has a `worker` service (RQ background worker) and a `cron`
-# service (stale pending_upload cleanup), plus a `redis` service backing both the job
-# queue and rate limiting. None of those have a free tier on Render. They're removed
-# here rather than commented out - the pre-free-tier version (with worker/cron/redis
-# and the paid db/redis plans) is in git history on the commit before this one; restore
-# from there when a paid plan exists. The app code has matching TEMP bypasses
+# service (stale pending_upload cleanup), plus a `redis` service for the job queue and
+# rate limiting. None of those have a free tier on Render. They're removed here rather
+# than commented out - a pre-free-tier version (with worker/cron/redis) is in git
+# history for reference, though it also predates the no-database redesign and would
+# need updating either way. The app code has matching TEMP bypasses
 # (app/routers/submissions.py runs the moderation/Salesforce jobs in-process via
 # BackgroundTasks instead of enqueueing to Redis; app/rate_limit.py uses in-memory
 # storage instead of Redis) that need reverting alongside this file.
@@ -17,10 +21,6 @@ services:
     dockerContext: .
     dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: formulario-db
-          property: connectionString
       - key: R2_ACCESS_KEY_ID
         sync: false
       - key: R2_SECRET_ACCESS_KEY
@@ -41,7 +41,8 @@ services:
       # Vercel preview/prod URL, but not a custom Tienda Inglesa subdomain.
       - key: CORS_ALLOW_ORIGINS
         sync: false
-      # Salesforce Marketing Cloud - optional (SFMC_ENABLED defaults false).
+      # Salesforce Marketing Cloud - set SFMC_ENABLED=true for the app to actually do
+      # anything (it's the only store); left toggleable for local/test convenience.
       - key: SFMC_ENABLED
         sync: false
       - key: SFMC_SUBDOMAIN
@@ -52,9 +53,3 @@ services:
         sync: false
       - key: SFMC_DATA_EXTENSION_KEY
         sync: false
-
-# Postgres databases are a separate top-level section in Render's Blueprint schema,
-# not another entry under `services` - `type: psql` there errors as "unknown type".
-databases:
-  - name: formulario-db
-    plan: free

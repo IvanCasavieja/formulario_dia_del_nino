@@ -9,12 +9,12 @@ import {
 } from "@/lib/adminApi";
 
 interface Props {
-  submissionId: string;
+  childCedula: string;
   onClose: () => void;
   onDecided: () => void;
 }
 
-export function SubmissionDetail({ submissionId, onClose, onDecided }: Props) {
+export function SubmissionDetail({ childCedula, onClose, onDecided }: Props) {
   const [detail, setDetail] = useState<AdminSubmissionDetailType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -23,11 +23,11 @@ export function SubmissionDetail({ submissionId, onClose, onDecided }: Props) {
 
   useEffect(() => {
     // No reset of `detail`/`error` here on purpose: the parent renders this component
-    // with `key={submissionId}`, so switching rows remounts it with fresh state
+    // with `key={childCedula}`, so switching rows remounts it with fresh state
     // instead of needing an imperative reset (which would otherwise be a synchronous
     // setState call sitting directly in the effect body).
     let cancelled = false;
-    getSubmissionDetail(submissionId)
+    getSubmissionDetail(childCedula)
       .then((data) => {
         if (!cancelled) setDetail(data);
       })
@@ -37,13 +37,13 @@ export function SubmissionDetail({ submissionId, onClose, onDecided }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [submissionId]);
+  }, [childCedula]);
 
   async function decide(decision: "approved" | "rejected") {
     setSaving(true);
     setError(null);
     try {
-      await decideSubmission(submissionId, decision, note || undefined, reviewedBy || undefined);
+      await decideSubmission(childCedula, decision, note || undefined, reviewedBy || undefined);
       onDecided();
     } catch (err) {
       setError(err instanceof AdminApiError ? err.message : "Error al guardar la decisión.");
@@ -83,18 +83,6 @@ export function SubmissionDetail({ submissionId, onClose, onDecided }: Props) {
               <dd className="text-zinc-900">{detail.parent_phone}</dd>
               <dt className="text-zinc-500">Estado</dt>
               <dd className="text-zinc-900">{detail.status}</dd>
-              <dt className="text-zinc-500">Duración del video</dt>
-              <dd className="text-zinc-900">
-                {detail.video_duration_seconds ? `${detail.video_duration_seconds.toFixed(1)}s` : "-"}
-              </dd>
-              <dt className="text-zinc-500">Salesforce</dt>
-              <dd className={detail.salesforce_sync_error ? "text-rose-600" : "text-zinc-900"}>
-                {detail.salesforce_synced_at
-                  ? `Sincronizado (${new Date(detail.salesforce_synced_at).toLocaleString("es-UY")})`
-                  : detail.salesforce_sync_error
-                    ? `Error: ${detail.salesforce_sync_error}`
-                    : "Pendiente / no habilitado"}
-              </dd>
             </dl>
 
             {detail.video_view_url ? (
@@ -108,7 +96,7 @@ export function SubmissionDetail({ submissionId, onClose, onDecided }: Props) {
             {detail.moderation_result && (
               <details className="rounded-2xl bg-zinc-50 p-3 text-xs text-zinc-600">
                 <summary className="cursor-pointer font-medium text-zinc-700">Resultado de moderación</summary>
-                <pre className="mt-2 whitespace-pre-wrap">{JSON.stringify(detail.moderation_result, null, 2)}</pre>
+                <pre className="mt-2 whitespace-pre-wrap">{detail.moderation_result}</pre>
               </details>
             )}
 

@@ -14,47 +14,55 @@ real de pauta paga desde el día uno.
   que sea una app aparte y no rutas `/admin/*` dentro del sitio público: separa por
   completo la superficie pública de la interna, aunque ambas comparten el mismo
   backend.
-- **Backend** (`/backend`): FastAPI → Render (`web` + `worker` + `cron`, ver `render.yaml`).
-  Ambos frontends le hablan a la misma API.
+- **Backend** (`/backend`): FastAPI → Render, un único servicio `web` (ver
+  `render.yaml`). Ambos frontends le hablan a la misma API.
+- **No hay base de datos propia, a propósito.** Por requisito explícito, ningún dato
+  personal (nombre, cédula, email, teléfono) vive en ningún lado más que en la Data
+  Extension de Salesforce Marketing Cloud - ver más abajo. Esto también significa que
+  no hay worker ni cron separados: la moderación y el envío a Salesforce corren
+  in-process en el mismo servicio web, vía `BackgroundTasks` de FastAPI (ver
+  `app/routers/submissions.py` y `app/worker/tasks.py`).
 - **Storage de video**: Cloudflare R2 (S3-compatible). El navegador sube el video
   directo a R2 con una URL pre-firmada — nunca pasa por el backend.
-- **Base de datos**: PostgreSQL.
-- **Cola**: Redis + RQ, para el procesamiento en background (un worker separado del
-  proceso web).
-- **Moderación**: 100% manual. El worker solo revalida formato/duración/tamaño con
-  `ffprobe` sobre el archivo real; todo lo que pasa esa validación cae en
-  `needs_review` y espera aprobación desde el panel de admin. No hay moderación
-  automática de contenido.
-- **Validaciones reales de duración/tamaño/formato ocurren en el worker**, no solo en
+- **Salesforce Marketing Cloud es el único almacenamiento persistente del proyecto**
+  (`app/salesforce.py`). La Data Extension **Formulario_Video_Nino** (carpeta
+  Audiencias Segmentadas > Dia del Nino, external key
+  `7CCD02A7-AA66-48EB-94A0-EA93BC09914D`) tiene `Cedula_Nino` (la cédula del menor)
+  como **Primary Key** - un mismo niño/a no puede tener dos filas, pero un mismo
+  adulto sí puede tener varias (uno por cada hijo/a que anote). Los datos del
+  formulario recién se escriben ahí en `confirm_upload`, después de confirmar la
+  subida del video - nunca antes. El estado de revisión (`Status`,
+  `ModerationResult`, `AdminNotes`, `AdminReviewedBy`) también vive en esa misma DE,
+  como columnas adicionales - no hay ningún otro lugar donde trackearlo. El panel de
+  admin lee y escribe directo contra la API de Salesforce, no contra una base propia.
+  Endpoint y payload ya se verificaron en vivo contra el tenant real
+  (`backend/scripts/test_salesforce_sync.py`): el insert/update es por el endpoint
+  *async* de Data Extension Rows (`/data/v1/async/dataextensions/key:.../rows`, POST
+  inserta, PUT hace upsert por la primary key), con cada item como los valores del
+  campo directamente, sin wrapper `"values"` - ver el docstring de `app/salesforce.py`
+  para el detalle completo, incluyendo que un `202` no garantiza que la fila se haya
+  escrito (hay que consultar el resultado async) y que el Get/`$filter` funciona sobre
+  cualquier columna aunque la DE no sea "Sendable".
+- **Moderación**: 100% manual. El proceso en background solo revalida
+  formato/duración/tamaño con `ffprobe` sobre el archivo real; todo lo que pasa esa
+  validación cae en `needs_review` y espera aprobación desde el panel de admin. No hay
+  moderación automática de contenido.
+- **Validaciones reales de duración/tamaño/formato ocurren en el backend**, no solo en
   el navegador: una URL pre-firmada de PUT no puede hacer cumplir un tamaño máximo por
   sí sola, así que el navegador es solo la primera línea de defensa (para no hacerle
-  perder tiempo de upload a nadie), y el worker vuelve a validar con `ffprobe` sobre el
-  archivo real después de subido.
+  perder tiempo de upload a nadie), y el backend vuelve a validar con `ffprobe` sobre
+  el archivo real después de subido.
 - `/shared/validationConstants.json` es la única fuente de verdad para los límites
   (60s, 200MB, tipos de archivo permitidos): tanto el backend (`app/shared_constants.py`)
   como el frontend (`lib/validationConstants.ts`) lo leen directamente, para que nunca
   queden desincronizados.
-- **Salesforce Marketing Cloud**: apenas se confirma la subida del video, se dispara un
-  job en background (`app/worker/salesforce_tasks.py`) que inserta una fila en una Data
-  Extension vía la REST API de Marketing Cloud (`app/salesforce.py`). Es *best-effort*:
-  nunca bloquea el formulario ni la moderación; si falla (reintenta unas veces), queda
-  registrado en `salesforce_sync_error` y visible en el panel de admin para reintentar a
-  mano. Apagado por defecto (`SFMC_ENABLED=false`) hasta que existan credenciales reales
-  — ver "Variables de entorno" y "Notas operativas" más abajo. Endpoint y payload ya se
-  verificaron en vivo contra el tenant real (`backend/scripts/test_salesforce_sync.py`):
-  el insert es por el endpoint *async* de Data Extension Rows
-  (`/data/v1/async/dataextensions/key:.../rows`, con cada item como los valores del
-  campo directamente, sin wrapper `"values"`) - ver el docstring de
-  `app/salesforce.py` para el detalle de por qué, incluyendo que un `202` no
-  garantiza que la fila se haya insertado (hay que consultar el resultado async).
 
 ## Requisitos para desarrollo local
 
 - Python 3.12+
 - Node.js 20+
-- Docker (para `docker-compose` con Postgres + Redis locales) — opcional si ya tenés
-  Postgres/Redis corriendo de otra forma.
-- `ffmpeg` instalado localmente si vas a correr el worker fuera de Docker (`ffmpeg -version`).
+- `ffmpeg` instalado localmente para correr el backend (`ffmpeg -version`) - lo usa la
+  validación server-side del video (`ffprobe`).
 
 ## Variables de entorno
 
@@ -62,8 +70,6 @@ Copiar [backend/.env.example](backend/.env.example) a `backend/.env` y completar
 
 | Variable | Qué es |
 |---|---|
-| `DATABASE_URL` | Connection string de Postgres |
-| `REDIS_URL` | Connection string de Redis (cola RQ + rate limiting) |
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Credenciales de un API token de Cloudflare R2 con permisos de lectura/escritura sobre el bucket |
 | `R2_ENDPOINT_URL` | `https://<account_id>.r2.cloudflarestorage.com` |
 | `R2_BUCKET_NAME` | Bucket donde se guardan los videos |
@@ -89,33 +95,18 @@ tener dos dominios distintos hablándole a la misma API.
 
 ## Correr en local
 
-### Backend + Postgres + Redis vía Docker
-
-```bash
-cd backend
-docker compose up --build
-```
-
-Después, aplicar las migraciones (una sola vez / cada vez que cambie el esquema):
-
-```bash
-cd backend
-source .venv/Scripts/activate  # o el venv que uses
-alembic upgrade head
-```
-
-### Backend sin Docker
+No hace falta Docker ni ninguna base de datos - solo Python y `ffmpeg` instalado.
 
 ```bash
 cd backend
 python -m venv .venv
 source .venv/Scripts/activate
 pip install -r requirements.txt
-alembic upgrade head
 uvicorn app.main:app --reload
-# en otra terminal, el worker:
-python -m app.worker.run
 ```
+
+La moderación y el envío a Salesforce corren en el mismo proceso (vía
+`BackgroundTasks`), así que no hace falta levantar nada aparte.
 
 ### Tests del backend
 
@@ -147,11 +138,11 @@ y ponerla en `backend/.env` como `ADMIN_PASSWORD_HASH` antes de probar el login.
 
 ### Backend (Render)
 
-`render.yaml` en la raíz define los 4 servicios: `web`, `worker`, un `cron` (limpieza
-de inscripciones abandonadas) y la base Postgres, más un Redis. Todos comparten
-`backend/Dockerfile` (necesario porque `ffmpeg` no está disponible en el buildpack
-nativo de Python de Render). Al importar el blueprint, Render va a pedir completar las
-variables marcadas `sync: false` (credenciales de R2/AWS, secretos, `CORS_ALLOW_ORIGINS`).
+`render.yaml` en la raíz define un único servicio `web` (plan `free` por ahora - ver
+el comentario TEMP al principio del archivo). Usa `backend/Dockerfile` porque
+`ffmpeg` no está disponible en el buildpack nativo de Python de Render. Al importar
+el blueprint, Render va a pedir completar las variables marcadas `sync: false`
+(credenciales de R2, secretos, `CORS_ALLOW_ORIGINS`, credenciales de Salesforce).
 
 ### Frontends (Vercel)
 
@@ -222,19 +213,18 @@ credenciales en este entorno para hacerlos:
   (formato/duración/tamaño) cae en `needs_review` y espera aprobación desde el panel
   de admin. No hay moderación automática de contenido.
 - Retención de datos: los registros (aprobados, rechazados o lo que sea) quedan
-  indefinidamente en Postgres — no hay borrado automático, según confirmaron. Además se
-  sincronizan a Salesforce Marketing Cloud (ver arriba).
+  indefinidamente en la Data Extension de Salesforce — no hay borrado automático. No
+  hay ninguna otra copia en ningún lado (ver "Arquitectura" más arriba).
 - Selección y notificación del ganador del sorteo es 100% manual, por fuera de este
   proyecto (celular/correo) — no hay nada construido para eso, a propósito.
 - El destino en Salesforce ya existe: la Data Extension **Formulario_Video_Nino**
   (carpeta Audiencias Segmentadas > Dia del Nino, external key
-  `7CCD02A7-AA66-48EB-94A0-EA93BC09914D`). `app/worker/salesforce_tasks.py` mapea cada
-  submission a sus columnas reales (`Nombre_Adulto`, `Apellido_Adulto`, `EmailAddress`,
-  `Celular`, `Cedula`, `Nombre_nino`, `Apellido_nino`, `Cedula_Nino`, `Term_Cond`) — si
-  la DE cambia de esquema, ese es el único lugar que hay que tocar. El campo
-  `Link_Video` que tenía la DE no se usa (el video se va a publicar directo en R2, no
-  hace falta un link en Salesforce) — si sigue existiendo como columna obligatoria en
-  la DE, hay que borrarlo o marcarlo nullable, si no el insert va a fallar.
+  `7CCD02A7-AA66-48EB-94A0-EA93BC09914D`), con `Cedula_Nino` como Primary Key.
+  `app/salesforce.py` (`build_row_fields`) mapea cada submission a sus columnas reales
+  (`Nombre_Adulto`, `Apellido_Adulto`, `EmailAddress`, `Celular`, `Cedula`,
+  `Nombre_nino`, `Apellido_nino`, `Cedula_Nino`, `Term_Cond`, más `Status`, `VideoKey`,
+  `ModerationResult`, `AdminNotes`, `AdminReviewedBy` para el estado de revisión) — si
+  la DE cambia de esquema, ese es el único lugar que hay que tocar.
 - Para habilitar el envío a Salesforce: crear el "Installed Package" en Marketing Cloud
   (Setup → Apps → Installed Packages → componente API Integration, tipo
   Server-to-Server, con permiso Read/Write sobre Data Extensions), cargar las
@@ -242,5 +232,5 @@ credenciales en este entorno para hacerlos:
   `SFMC_DATA_EXTENSION_KEY` con el external key de arriba), y poner
   `SFMC_ENABLED=true`. Para confirmar que tus propias credenciales funcionan antes de
   activarlo en el flujo real, corré `python scripts/test_salesforce_sync.py` desde
-  `backend/` (deja una fila obviamente falsa en la DE, con `Cedula=00000000` - borrala
-  a mano después de confirmar que llegó bien).
+  `backend/` (deja una fila obviamente falsa en la DE, con `Cedula_Nino=99999999` -
+  borrala a mano después de confirmar que llegó bien).

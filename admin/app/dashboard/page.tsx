@@ -20,7 +20,7 @@ const STATUS_OPTIONS = [
 export default function AdminDashboardPage() {
   const [status, setStatus] = useState("needs_review");
   const [submissions, setSubmissions] = useState<AdminSubmissionListItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedCedula, setSelectedCedula] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,15 +81,15 @@ export default function AdminDashboardPage() {
       {loading && <p className="text-sm text-zinc-500">Cargando...</p>}
       {error && <p className="text-sm text-rose-600">{error}</p>}
 
-      <SubmissionsTable submissions={submissions} onSelect={setSelectedId} />
+      <SubmissionsTable submissions={submissions} onSelect={setSelectedCedula} />
 
-      {selectedId && (
+      {selectedCedula && (
         <SubmissionDetail
-          key={selectedId}
-          submissionId={selectedId}
-          onClose={() => setSelectedId(null)}
+          key={selectedCedula}
+          childCedula={selectedCedula}
+          onClose={() => setSelectedCedula(null)}
           onDecided={() => {
-            setSelectedId(null);
+            setSelectedCedula(null);
             refresh();
           }}
         />

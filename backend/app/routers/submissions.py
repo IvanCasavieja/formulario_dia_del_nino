@@ -1,92 +1,57 @@
 import uuid
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 
 from app import r2, security
 from app.config import get_settings
-from app.db import get_db
-from app.models import Submission, SubmissionStatus
+from app.models import SubmissionStatus
 from app.rate_limit import limiter
-from app.schemas import SubmissionCreateRequest, SubmissionCreateResponse, SubmissionStatusResponse
-
-# TEMP (free tier, no Redis/worker service - revert once on a paid plan): calling the
-# task functions directly instead of enqueueing to app.worker.queue. No retries, no
-# on_failure recording - see confirm_upload below.
-from app.worker.salesforce_tasks import sync_submission_to_salesforce
+from app.salesforce import SalesforceSyncError, build_row_fields, get_row_by_cedula_nino, upsert_row
+from app.schemas import SubmissionCreateRequest, SubmissionCreateResponse
 from app.worker.tasks import process_submission_video
 
 settings = get_settings()
 router = APIRouter(prefix="/api/submissions", tags=["submissions"])
 
-
-def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
-
-
-def _apply_fields(submission: Submission, payload: SubmissionCreateRequest, client_ip: str, video_key: str) -> None:
-    submission.parent_first_name = payload.parent_first_name
-    submission.parent_last_name = payload.parent_last_name
-    submission.parent_cedula = payload.parent_cedula
-    submission.parent_email = payload.parent_email
-    submission.parent_phone = payload.parent_phone
-    submission.child_first_name = payload.child_first_name
-    submission.child_last_name = payload.child_last_name
-    submission.child_cedula = payload.child_cedula
-    submission.video_key = video_key
-    submission.video_content_type = payload.video_content_type
-    submission.video_declared_size_bytes = payload.video_declared_size_bytes
-    submission.video_declared_duration_seconds = payload.video_declared_duration_seconds
-    submission.terms_accepted = payload.terms_accepted
-    submission.terms_version = payload.terms_version
-    submission.ip_address = client_ip
+# A row with one of these statuses (or none yet) doesn't block a fresh attempt for the
+# same child - anything else (uploaded/processing/needs_review/approved/rejected)
+# means there's already a real entry for that child.
+_RESUBMITTABLE_STATUSES = {"", SubmissionStatus.PENDING_UPLOAD.value, SubmissionStatus.EXPIRED.value}
 
 
 @router.post("", response_model=SubmissionCreateResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.RATE_LIMIT_SUBMIT)
-def create_submission(
-    request: Request, payload: SubmissionCreateRequest, db: Session = Depends(get_db)
-) -> SubmissionCreateResponse:
-    client_ip = _client_ip(request)
-
-    existing = db.scalar(select(Submission).where(Submission.child_cedula == payload.child_cedula))
-
-    if existing is not None and existing.status != SubmissionStatus.PENDING_UPLOAD:
+def create_submission(request: Request, payload: SubmissionCreateRequest) -> SubmissionCreateResponse:
+    # Dedup check against Salesforce directly - there's no database of our own to ask.
+    # No row in Salesforce means no submission has ever been confirmed for this child.
+    existing = get_row_by_cedula_nino(payload.child_cedula)
+    if existing is not None and existing.get("status") not in _RESUBMITTABLE_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"error": "duplicate_child_cedula", "message": "Ya existe una inscripción para este niño/a."},
         )
 
-    submission_id = existing.id if existing is not None else uuid.uuid4()
+    # This id only lives for the duration of the upload window (inside the signed
+    # token below) - it's never written anywhere, just used to build a private R2 key.
+    submission_id = uuid.uuid4()
     video_key = r2.build_video_key(submission_id, payload.video_content_type)
 
-    if existing is not None:
-        submission = existing
-        _apply_fields(submission, payload, client_ip, video_key)
-    else:
-        submission = Submission(id=submission_id, status=SubmissionStatus.PENDING_UPLOAD)
-        _apply_fields(submission, payload, client_ip, video_key)
-        db.add(submission)
-
-    try:
-        db.commit()
-    except IntegrityError:
-        # Race backstop: two concurrent requests for the same child_cedula could both
-        # pass the pre-check above. The DB unique constraint is the real guarantee.
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"error": "duplicate_child_cedula", "message": "Ya existe una inscripción para este niño/a."},
-        )
-
-    upload_token = security.create_upload_token(str(submission.id), video_key)
+    fields = {
+        "parent_first_name": payload.parent_first_name,
+        "parent_last_name": payload.parent_last_name,
+        "parent_cedula": payload.parent_cedula,
+        "parent_email": payload.parent_email,
+        "parent_phone": payload.parent_phone,
+        "child_first_name": payload.child_first_name,
+        "child_last_name": payload.child_last_name,
+        "child_cedula": payload.child_cedula,
+        "terms_accepted": payload.terms_accepted,
+    }
+    upload_token = security.create_upload_token(str(submission_id), video_key, fields)
     upload_url = r2.create_presigned_put_url(video_key, payload.video_content_type)
 
     return SubmissionCreateResponse(
-        submission_id=submission.id,
+        submission_id=submission_id,
         upload_url=upload_url,
         upload_token=upload_token,
         video_key=video_key,
@@ -109,12 +74,11 @@ def confirm_upload(
     submission_id: uuid.UUID,
     background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
-    db: Session = Depends(get_db),
 ) -> dict:
     token = _extract_bearer_token(authorization)
 
     try:
-        security.decode_upload_token(token, str(submission_id))
+        claims = security.decode_upload_token(token, str(submission_id))
     except security.TokenExpired:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"error": "upload_token_expired"})
     except security.TokenSubmissionMismatch:
@@ -122,53 +86,34 @@ def confirm_upload(
     except security.TokenInvalid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"error": "invalid_upload_token"})
 
-    submission = db.get(Submission, submission_id)
-    if submission is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "submission_not_found"})
-
-    if submission.status != SubmissionStatus.PENDING_UPLOAD:
-        # Idempotency/replay guard: a replayed or double-fired confirm-upload call lands
-        # here as a clean no-op instead of re-enqueueing a duplicate moderation job.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail={"error": "already_confirmed", "status": submission.status}
-        )
+    video_key = claims["video_key"]
+    fields = claims["fields"]
 
     # TEMP (R2 sin contratar - revertir cuando exista): sin bucket real no hay nada que
     # head_object pueda encontrar, así que este chequeo queda pausado. Es la única
-    # verificación de que el video realmente existe antes de avisarle a Salesforce/admin
-    # que la inscripción es real - reactivarlo es condición para ir a producción.
+    # verificación de que el video realmente existe antes de escribir en Salesforce -
+    # reactivarlo es condición para ir a producción.
     #
-    # head = r2.head_object(submission.video_key)
+    # head = r2.head_object(video_key)
     # if head is None or head.get("ContentLength", 0) <= 0:
     #     raise HTTPException(
     #         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={"error": "video_not_found_in_storage"}
     #     )
 
-    submission.status = SubmissionStatus.UPLOADED
-    submission.uploaded_at = datetime.now(timezone.utc)
-    submission.video_actual_size_bytes = submission.video_declared_size_bytes  # TEMP: ver arriba
-    db.commit()
+    # This is the one and only place any of this data gets written anywhere - right
+    # here, right after the video upload is confirmed. If this fails, the submission
+    # genuinely doesn't exist and the client needs to know (and can retry) rather than
+    # silently losing the entry.
+    row_fields = build_row_fields(**fields)
+    row_fields["Status"] = SubmissionStatus.UPLOADED.value
+    row_fields["VideoKey"] = video_key
+    try:
+        upsert_row(row_fields)
+    except SalesforceSyncError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail={"error": "salesforce_write_failed", "message": str(e)}
+        )
 
-    # TEMP (free tier, no Redis/worker service - revert to enqueue_submission_processing
-    # once on a paid plan): runs in-process after the response is sent, via FastAPI's
-    # BackgroundTasks instead of RQ. No automatic retries, and a failure here doesn't
-    # get recorded anywhere (on_submission_failure is an RQ-only callback) - it just
-    # raises in server logs. Fine for a demo, not for real traffic.
-    background_tasks.add_task(process_submission_video, str(submission.id))
-
-    if settings.SFMC_ENABLED:
-        # Fires right here per spec: Salesforce gets the raw submission data as soon as
-        # the video upload is confirmed, not after moderation runs. Best-effort/never
-        # blocks - failures only show up as salesforce_sync_error in the admin panel
-        # (only true for the real enqueue_salesforce_sync path - see TEMP note above).
-        background_tasks.add_task(sync_submission_to_salesforce, str(submission.id))
+    background_tasks.add_task(process_submission_video, video_key, fields["child_cedula"])
 
     return {"status": "processing"}
-
-
-@router.get("/{submission_id}/status", response_model=SubmissionStatusResponse)
-def get_submission_status(submission_id: uuid.UUID, db: Session = Depends(get_db)) -> SubmissionStatusResponse:
-    submission = db.get(Submission, submission_id)
-    if submission is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "submission_not_found"})
-    return SubmissionStatusResponse(submission_id=submission.id, status=submission.status)

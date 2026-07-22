@@ -1,12 +1,10 @@
 import re
-from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app import shared_constants as sc
-from app.models import SubmissionStatus
 
 _DIGITS_RE = re.compile(r"\D+")
 
@@ -105,11 +103,6 @@ class SubmissionCreateResponse(BaseModel):
     expires_in: int
 
 
-class SubmissionStatusResponse(BaseModel):
-    submission_id: UUID
-    status: SubmissionStatus
-
-
 class AdminLoginRequest(BaseModel):
     password: str
 
@@ -121,19 +114,18 @@ class AdminLoginResponse(BaseModel):
 
 
 class AdminSubmissionListItem(BaseModel):
-    id: UUID
+    # child_cedula (Cedula_Nino) is the natural identifier now - there's no separate
+    # internal id, Salesforce is the only store and it's the DE's primary key.
+    child_cedula: str
     parent_first_name: str
     parent_last_name: str
     child_first_name: str
     child_last_name: str
-    status: SubmissionStatus
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
+    status: str
 
 
 class AdminSubmissionDetail(BaseModel):
-    id: UUID
+    child_cedula: str
     parent_first_name: str
     parent_last_name: str
     parent_cedula: str
@@ -141,23 +133,13 @@ class AdminSubmissionDetail(BaseModel):
     parent_phone: str
     child_first_name: str
     child_last_name: str
-    child_cedula: str
-    video_content_type: str
-    video_actual_size_bytes: int | None
-    video_duration_seconds: float | None
-    status: SubmissionStatus
-    moderation_result: dict | None
-    admin_notes: str | None
-    admin_reviewed_by: str | None
-    admin_decided_at: datetime | None
+    status: str
+    moderation_result: str | None = None
+    admin_notes: str | None = None
+    admin_reviewed_by: str | None = None
     terms_accepted: bool
-    terms_version: str
-    created_at: datetime
+    video_key: str | None = None
     video_view_url: str | None = None
-    salesforce_synced_at: datetime | None
-    salesforce_sync_error: str | None
-
-    model_config = {"from_attributes": True}
 
 
 class AdminDecisionRequest(BaseModel):

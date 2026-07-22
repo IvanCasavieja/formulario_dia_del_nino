@@ -8,12 +8,6 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: str = "development"
 
-    # Postgres
-    DATABASE_URL: str
-
-    # Redis (RQ queue + rate limiting)
-    REDIS_URL: str = "redis://localhost:6379/0"
-
     # Cloudflare R2 (S3-compatible)
     R2_ACCESS_KEY_ID: str
     R2_SECRET_ACCESS_KEY: str
@@ -45,20 +39,16 @@ class Settings(BaseSettings):
     # can be relaxed to "needs_review" if false positives from flaky ffprobe show up in practice.
     SERVER_VALIDATION_FAILURE_STATUS: str = "rejected"
 
-    # Stale pending_upload cleanup (Render cron)
-    PENDING_UPLOAD_EXPIRY_SECONDS: int = 2 * 1800  # 2x upload token TTL
-
-    # Salesforce Marketing Cloud sync (best-effort, fires once per submission right
-    # after upload is confirmed - see routers/submissions.py). Off by default and all
-    # fields optional: real credentials don't exist yet, and nothing here should break
-    # Settings() for anyone who hasn't set this up. Flip SFMC_ENABLED once configured.
+    # Salesforce Marketing Cloud - the only persistent store for this project (see
+    # app/salesforce.py). Required for the app to do anything useful, but still
+    # defaults to disabled/optional so Settings() doesn't break for anyone who hasn't
+    # configured it yet (e.g. running the test suite). Flip SFMC_ENABLED once set up.
     SFMC_ENABLED: bool = False
     SFMC_SUBDOMAIN: str | None = None  # the "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" tenant subdomain
     SFMC_CLIENT_ID: str | None = None  # from the Installed Package (server-to-server / API Integration component)
     SFMC_CLIENT_SECRET: str | None = None
     SFMC_ACCOUNT_ID: str | None = None  # MID of the target Business Unit, if the package spans multiple BUs
     SFMC_DATA_EXTENSION_KEY: str | None = None  # External Key of the target Data Extension
-    SFMC_SYNC_RETRY_MAX: int = 3
     SFMC_REQUEST_TIMEOUT_SECONDS: float = 15.0
 
     @property

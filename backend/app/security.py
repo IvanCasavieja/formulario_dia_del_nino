@@ -27,12 +27,18 @@ class TokenSubmissionMismatch(TokenInvalid):
     pass
 
 
-def create_upload_token(submission_id: str, video_key: str) -> str:
+def create_upload_token(submission_id: str, video_key: str, fields: dict) -> str:
+    """`fields` carries the submitted form data (parent/child names, cedulas, email,
+    phone, terms_accepted) across the create -> confirm-upload round trip. There's no
+    database to persist it in between - Salesforce is the only store, and it isn't
+    written to until confirm-upload, so the token itself is where this lives for the
+    ~30 minute upload window. Signed and short-lived, same as the rest of this token."""
     now = int(time.time())
     payload = {
         "sub": submission_id,
         "purpose": UPLOAD_TOKEN_PURPOSE,
         "video_key": video_key,
+        "fields": fields,
         "iat": now,
         "exp": now + settings.UPLOAD_TOKEN_TTL_SECONDS,
         "jti": str(uuid.uuid4()),

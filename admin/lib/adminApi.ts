@@ -53,13 +53,14 @@ export async function adminLogin(password: string): Promise<{ access_token: stri
 }
 
 export interface AdminSubmissionListItem {
-  id: string;
+  // Cedula_Nino - the child's cedula. There's no separate internal id anymore:
+  // Salesforce is the only store, and this is the Data Extension's primary key.
+  child_cedula: string;
   parent_first_name: string;
   parent_last_name: string;
   child_first_name: string;
   child_last_name: string;
   status: string;
-  created_at: string;
 }
 
 export async function listSubmissions(status?: string): Promise<AdminSubmissionListItem[]> {
@@ -76,23 +77,16 @@ export interface AdminSubmissionDetail extends AdminSubmissionListItem {
   parent_cedula: string;
   parent_email: string;
   parent_phone: string;
-  child_cedula: string;
-  video_content_type: string;
-  video_actual_size_bytes: number | null;
-  video_duration_seconds: number | null;
-  moderation_result: Record<string, unknown> | null;
+  moderation_result: string | null;
   admin_notes: string | null;
   admin_reviewed_by: string | null;
-  admin_decided_at: string | null;
   terms_accepted: boolean;
-  terms_version: string;
+  video_key: string | null;
   video_view_url: string | null;
-  salesforce_synced_at: string | null;
-  salesforce_sync_error: string | null;
 }
 
-export async function getSubmissionDetail(id: string): Promise<AdminSubmissionDetail> {
-  const response = await adminFetch(`/api/admin/submissions/${id}`);
+export async function getSubmissionDetail(childCedula: string): Promise<AdminSubmissionDetail> {
+  const response = await adminFetch(`/api/admin/submissions/${childCedula}`);
   if (!response.ok) {
     const detail = await readErrorDetail(response);
     throw new AdminApiError(response.status, detail.message ?? "No se pudo cargar el detalle.", detail.error);
@@ -101,12 +95,12 @@ export async function getSubmissionDetail(id: string): Promise<AdminSubmissionDe
 }
 
 export async function decideSubmission(
-  id: string,
+  childCedula: string,
   decision: "approved" | "rejected",
   note?: string,
   reviewedBy?: string,
 ): Promise<AdminSubmissionDetail> {
-  const response = await adminFetch(`/api/admin/submissions/${id}/decision`, {
+  const response = await adminFetch(`/api/admin/submissions/${childCedula}/decision`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ decision, note, reviewed_by: reviewedBy }),

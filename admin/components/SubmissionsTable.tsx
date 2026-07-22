@@ -20,13 +20,12 @@ export function SubmissionsTable({ submissions, onSelect }: Props) {
             <th className="px-4 py-3 font-medium">Niño/a</th>
             <th className="px-4 py-3 font-medium">Padre/Madre</th>
             <th className="px-4 py-3 font-medium">Estado</th>
-            <th className="px-4 py-3 font-medium">Fecha</th>
             <th className="px-4 py-3" />
           </tr>
         </thead>
         <tbody>
           {submissions.map((submission) => (
-            <tr key={submission.id} className="border-b border-zinc-100 last:border-0">
+            <tr key={submission.child_cedula} className="border-b border-zinc-100 last:border-0">
               <td className="px-4 py-3">
                 {submission.child_first_name} {submission.child_last_name}
               </td>
@@ -38,11 +37,11 @@ export function SubmissionsTable({ submissions, onSelect }: Props) {
                   {submission.status}
                 </span>
               </td>
-              <td className="px-4 py-3 text-zinc-500">
-                {new Date(submission.created_at).toLocaleString("es-UY")}
-              </td>
               <td className="px-4 py-3 text-right">
-                <button onClick={() => onSelect(submission.id)} className="font-medium text-rose-600 hover:underline">
+                <button
+                  onClick={() => onSelect(submission.child_cedula)}
+                  className="font-medium text-rose-600 hover:underline"
+                >
                   Ver
                 </button>
               </td>
