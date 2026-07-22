@@ -40,10 +40,13 @@ real de pauta paga desde el día uno.
   nunca bloquea el formulario ni la moderación; si falla (reintenta unas veces), queda
   registrado en `salesforce_sync_error` y visible en el panel de admin para reintentar a
   mano. Apagado por defecto (`SFMC_ENABLED=false`) hasta que existan credenciales reales
-  — ver "Variables de entorno" y "Notas operativas" más abajo. El endpoint/payload de la
-  API de Marketing Cloud se armó siguiendo la documentación pública de Salesforce, pero
-  nunca se probó contra un tenant real (no había credenciales al construirlo) — conviene
-  validarlo con un caso de prueba real antes de confiar en él en producción.
+  — ver "Variables de entorno" y "Notas operativas" más abajo. Endpoint y payload ya se
+  verificaron en vivo contra el tenant real (`backend/scripts/test_salesforce_sync.py`):
+  el insert es por el endpoint *async* de Data Extension Rows
+  (`/data/v1/async/dataextensions/key:.../rows`, con cada item como los valores del
+  campo directamente, sin wrapper `"values"`) - ver el docstring de
+  `app/salesforce.py` para el detalle de por qué, incluyendo que un `202` no
+  garantiza que la fila se haya insertado (hay que consultar el resultado async).
 
 ## Requisitos para desarrollo local
 
@@ -237,6 +240,7 @@ credenciales en este entorno para hacerlos:
   Server-to-Server, con permiso Read/Write sobre Data Extensions), cargar las
   credenciales (`SFMC_SUBDOMAIN`, `SFMC_CLIENT_ID`, `SFMC_CLIENT_SECRET`,
   `SFMC_DATA_EXTENSION_KEY` con el external key de arriba), y poner
-  `SFMC_ENABLED=true`. El request nunca se probó contra el tenant real — conviene
-  validar con un `curl` de prueba contra la DE (que hoy tiene 0 registros) antes de
-  confiar en el flujo automático.
+  `SFMC_ENABLED=true`. Para confirmar que tus propias credenciales funcionan antes de
+  activarlo en el flujo real, corré `python scripts/test_salesforce_sync.py` desde
+  `backend/` (deja una fila obviamente falsa en la DE, con `Cedula=00000000` - borrala
+  a mano después de confirmar que llegó bien).
