@@ -3,11 +3,21 @@
 confirm the SFMC REST API call actually works before trusting it in the automatic
 sync flow (app/worker/salesforce_tasks.py).
 
+IMPORTANT - this script is a connectivity test ONLY. It calls insert_data_extension_row
+directly with fake data, with no form, no video, no real Submission involved. It does
+NOT represent how the real flow works and must never be wired into the app that way.
+In production, a sync to Salesforce only ever fires from confirm_upload() in
+app/routers/submissions.py, and only after r2.head_object() confirms the video really
+landed in R2 - i.e. after the upload itself is validated, never before. Don't "simplify"
+that gating to look more like this script.
+
 Usage (from backend/, with .env filled in and SFMC_ENABLED=true):
     python scripts/test_salesforce_sync.py
 
 Leaves one row with Cedula=00000000 in the DE - delete it manually from Contact
-Builder once you've confirmed the row landed with the right values.
+Builder once you've confirmed the row landed with the right values. Running this
+script multiple times while debugging leaves one row per successful run (SFMC just
+inserts, it doesn't dedupe) - clean up any leftover PRUEBA rows when you're done.
 """
 from app.config import get_settings
 from app.salesforce import SalesforceSyncError, insert_data_extension_row
