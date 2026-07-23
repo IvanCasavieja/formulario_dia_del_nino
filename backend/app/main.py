@@ -8,7 +8,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import get_settings
 from app.rate_limit import limiter
-from app.routers import admin, health, submissions
+from app.routers import admin, health, submissions, votes
 
 settings = get_settings()
 
@@ -53,5 +53,6 @@ def unhandled_exception_handler(request: Request, exc: Exception) -> JSONRespons
 
 app.include_router(health.router)
 app.include_router(submissions.router)
+app.include_router(votes.router)
 app.include_router(admin.login_router)
 app.include_router(admin.router)

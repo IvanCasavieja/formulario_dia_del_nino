@@ -1,11 +1,20 @@
 """Salesforce Marketing Cloud REST API client: OAuth2 client-credentials auth against
 an Installed Package, then row operations against a Data Extension by External Key.
 
-This Data Extension (Formulario_Video_Nino) is the ONLY persistent store for this
-project - there is no database. Personal data (name, cedula, email, phone) must never
-be written anywhere else. Cedula_Nino is the DE's primary key (one entry per child,
-not per adult - the same parent can have two kids each entering separately), so every
-row operation here is keyed by it.
+This module talks to TWO Data Extensions, both reached through the same auth/HTTP
+plumbing below (parameterized by `de_key`):
+
+- **Formulario_Video_Nino** (etapa 1, inscripción) - the ONLY persistent store for
+  submissions, no database. `Cedula_Nino` is its Primary Key (one entry per child, not
+  per adult - the same parent can have two kids each entering separately). Reached via
+  `insert_row`/`upsert_row`/`get_row_by_cedula_nino`/`list_rows`, which default to
+  `settings.SFMC_DATA_EXTENSION_KEY`.
+- **the adults/voting DE** (etapa 2, votación) - `Cedula_Adulto` is its Primary Key,
+  marked Sendable in Contact Builder so it doubles as a deduplicated marketing
+  audience. Reached via `upsert_adult_row`/`get_adult_row_by_cedula`, which target
+  `settings.SFMC_ADULTS_DATA_EXTENSION_KEY`. Anyone can vote (not just registered
+  parents) - the row is created on first contact and just carries the vote state
+  (`HaVotado`/`Video_Votado`) after that.
 
 Endpoint/payload shapes verified live against the real tenant - see
 backend/scripts/test_salesforce_sync.py. Notes that aren't obvious from Salesforce's
@@ -17,10 +26,16 @@ docs and cost real trial and error:
   older `/data/v1/customobjectdata/key/.../rowset` only supports GET, not POST/PUT.
 - Each item in "items" is the field values directly (`{"ColumnName": value, ...}`) -
   no "values"/"keys" wrapper; wrapping it fails with a JSON deserialization error.
-- POST inserts (fails if Cedula_Nino already exists); PUT upserts (updates the row
+- POST inserts (fails if the primary key already exists); PUT upserts (updates the row
   matching the primary key, inserts if none matches) - but PUT silently returns an
   *async result* error (not an HTTP error) if the DE has no primary key defined at
   all: "This Data Extension does not have any primary keys defined."
+- PUT with a partial field set only touches the fields you send - confirmed in
+  practice by `_try_upsert_status` (worker/tasks.py) and `decide_submission`
+  (routers/admin.py), both of which repeatedly PUT just `{Cedula_Nino, Status, ...}`
+  against live rows that already carry contact fields, and those contact fields
+  survive. This is what lets the etapa-1 registration sync (submissions.py) push only
+  contact fields into the adults DE without ever touching `HaVotado`/`Video_Votado`.
 - Retrieve (`GET .../rowset`) returns lowercase field names in `values`, and supports
   `$filter` on any column (not only the primary key) even though this DE is not
   "sendable".
@@ -29,6 +44,7 @@ docs and cost real trial and error:
   vanishing (this is exactly how the NULL Link_Video rejection surfaced originally).
 """
 import time
+from datetime import datetime
 from urllib.parse import quote
 
 import httpx
@@ -55,15 +71,15 @@ def _rest_base_url() -> str:
     return f"https://{settings.SFMC_SUBDOMAIN}.rest.marketingcloudapis.com"
 
 
-def _rows_url() -> str:
-    return f"{_rest_base_url()}/data/v1/async/dataextensions/key:{settings.SFMC_DATA_EXTENSION_KEY}/rows"
+def _rows_url(de_key: str) -> str:
+    return f"{_rest_base_url()}/data/v1/async/dataextensions/key:{de_key}/rows"
 
 
-def _rowset_url() -> str:
-    return f"{_rest_base_url()}/data/v1/customobjectdata/key/{settings.SFMC_DATA_EXTENSION_KEY}/rowset"
+def _rowset_url(de_key: str) -> str:
+    return f"{_rest_base_url()}/data/v1/customobjectdata/key/{de_key}/rowset"
 
 
-def _build_rowset_url(filter_expr: str | None = None, page_size: int | None = None) -> str:
+def _build_rowset_url(de_key: str, filter_expr: str | None = None, page_size: int | None = None) -> str:
     """Appends $filter/$pageSize as a manually-built, pre-encoded query string instead
     of passing them through httpx's `params=` dict. Mashery (SFMC's API gateway)
     rejects a `+`-encoded space in $filter outright - "request parameter $filter could
@@ -75,12 +91,19 @@ def _build_rowset_url(filter_expr: str | None = None, page_size: int | None = No
     if page_size:
         query_parts.append(f"$pageSize={page_size}")
     query = "&".join(query_parts)
-    return f"{_rowset_url()}?{query}" if query else _rowset_url()
+    return f"{_rowset_url(de_key)}?{query}" if query else _rowset_url(de_key)
 
 
 def _require_enabled() -> None:
     if not settings.SFMC_ENABLED:
         raise SalesforceSyncError("SFMC_ENABLED is false - refusing to call a possibly-unconfigured integration")
+
+
+def _require_adults_de_configured() -> None:
+    if not settings.SFMC_ADULTS_DATA_EXTENSION_KEY:
+        raise SalesforceSyncError(
+            "SFMC_ADULTS_DATA_EXTENSION_KEY is not set - refusing to call the adults/voting Data Extension"
+        )
 
 
 def _get_access_token() -> str:
@@ -142,14 +165,13 @@ def _poll_request_result(request_id: str, headers: dict) -> None:
     raise SalesforceSyncError(f"row write timed out waiting for async result (requestId={request_id})")
 
 
-def insert_row(fields: dict) -> None:
-    """Inserts a new row. Fails if Cedula_Nino (the primary key) already exists."""
+def _insert_row(de_key: str, fields: dict) -> None:
     _require_enabled()
     token = _get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
     try:
         response = httpx.post(
-            _rows_url(), json={"items": [fields]}, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS
+            _rows_url(de_key), json={"items": [fields]}, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS
         )
         response.raise_for_status()
     except httpx.HTTPError as e:
@@ -158,15 +180,13 @@ def insert_row(fields: dict) -> None:
     _poll_request_result(response.json()["requestId"], headers)
 
 
-def upsert_row(fields: dict) -> None:
-    """Inserts or updates a row, matched by Cedula_Nino (the DE's primary key).
-    `fields` must include Cedula_Nino."""
+def _upsert_row(de_key: str, fields: dict) -> None:
     _require_enabled()
     token = _get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
     try:
         response = httpx.put(
-            _rows_url(), json={"items": [fields]}, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS
+            _rows_url(de_key), json={"items": [fields]}, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS
         )
         response.raise_for_status()
     except httpx.HTTPError as e:
@@ -175,13 +195,11 @@ def upsert_row(fields: dict) -> None:
     _poll_request_result(response.json()["requestId"], headers)
 
 
-def get_row_by_cedula_nino(cedula_nino: str) -> dict | None:
-    """Looks up a single row by the child's cedula. Returns the row's values
-    (lowercase field names, as SFMC returns them) or None if it doesn't exist."""
+def _get_row_by_field(de_key: str, field_name: str, field_value: str) -> dict | None:
     _require_enabled()
     token = _get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
-    url = _build_rowset_url(filter_expr=f"cedula_nino eq '{cedula_nino}'")
+    url = _build_rowset_url(de_key, filter_expr=f"{field_name} eq '{field_value}'")
     try:
         response = httpx.get(url, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
@@ -192,15 +210,12 @@ def get_row_by_cedula_nino(cedula_nino: str) -> dict | None:
     return items[0]["values"] if items else None
 
 
-def list_rows(status: str | None = None, limit: int = 200) -> list[dict]:
-    """Lists rows, optionally filtered by Status. This DE is the only store the admin
-    panel has to query. Non-sendable DEs cap out around 200 rows per call - fine at
-    this volume, would need real pagination past that."""
+def _list_rows(de_key: str, status: str | None = None, limit: int = 200) -> list[dict]:
     _require_enabled()
     token = _get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
     filter_expr = f"status eq '{status}'" if status else None
-    url = _build_rowset_url(filter_expr=filter_expr, page_size=limit)
+    url = _build_rowset_url(de_key, filter_expr=filter_expr, page_size=limit)
     try:
         response = httpx.get(url, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
@@ -208,6 +223,33 @@ def list_rows(status: str | None = None, limit: int = 200) -> list[dict]:
         detail = e.response.text if isinstance(e, httpx.HTTPStatusError) else str(e)
         raise SalesforceSyncError(f"row list failed: {detail}") from e
     return [item["values"] for item in response.json().get("items", [])]
+
+
+# --- Formulario_Video_Nino (etapa 1) -----------------------------------------------
+
+
+def insert_row(fields: dict) -> None:
+    """Inserts a new row. Fails if Cedula_Nino (the primary key) already exists."""
+    _insert_row(settings.SFMC_DATA_EXTENSION_KEY, fields)
+
+
+def upsert_row(fields: dict) -> None:
+    """Inserts or updates a row, matched by Cedula_Nino (the DE's primary key).
+    `fields` must include Cedula_Nino."""
+    _upsert_row(settings.SFMC_DATA_EXTENSION_KEY, fields)
+
+
+def get_row_by_cedula_nino(cedula_nino: str) -> dict | None:
+    """Looks up a single row by the child's cedula. Returns the row's values
+    (lowercase field names, as SFMC returns them) or None if it doesn't exist."""
+    return _get_row_by_field(settings.SFMC_DATA_EXTENSION_KEY, "cedula_nino", cedula_nino)
+
+
+def list_rows(status: str | None = None, limit: int = 200) -> list[dict]:
+    """Lists rows, optionally filtered by Status. This DE is the only store the admin
+    panel has to query. Non-sendable DEs cap out around 200 rows per call - fine at
+    this volume, would need real pagination past that."""
+    return _list_rows(settings.SFMC_DATA_EXTENSION_KEY, status=status, limit=limit)
 
 
 def build_row_fields(
@@ -234,4 +276,56 @@ def build_row_fields(
         "Apellido_nino": child_last_name,
         "Cedula_Nino": child_cedula,
         "Term_Cond": terms_accepted,
+    }
+
+
+# --- Adults/voting DE (etapa 2) -----------------------------------------------------
+
+
+def upsert_adult_row(fields: dict) -> None:
+    """Inserts or updates a row in the adults/voting DE, matched by Cedula_Adulto.
+    `fields` must include Cedula_Adulto. Used both by the etapa-1 registration sync
+    (contact fields only) and the etapa-2 vote endpoint (contact fields + vote state)."""
+    _require_adults_de_configured()
+    _upsert_row(settings.SFMC_ADULTS_DATA_EXTENSION_KEY, fields)
+
+
+def get_adult_row_by_cedula(cedula_adulto: str) -> dict | None:
+    """Looks up a single row by the adult's cedula in the voting DE. None means this
+    cedula has never registered a child nor voted before - not "not allowed to vote",
+    just "first contact", since anyone can vote regardless of etapa-1 registration."""
+    _require_adults_de_configured()
+    return _get_row_by_field(settings.SFMC_ADULTS_DATA_EXTENSION_KEY, "cedula_adulto", cedula_adulto)
+
+
+def build_adult_row_fields(
+    *,
+    adult_first_name: str,
+    adult_last_name: str,
+    adult_cedula: str,
+    adult_email: str,
+    adult_phone: str,
+    terms_accepted: bool,
+) -> dict:
+    """Contact + consent columns only for the adults/voting DE - deliberately excludes
+    HaVotado/Video_Votado so a caller can never accidentally reset vote state just by
+    reusing this builder (e.g. the etapa-1 registration sync in submissions.py)."""
+    return {
+        "Nombre_Adulto": adult_first_name,
+        "Apellido_Adulto": adult_last_name,
+        "Cedula_Adulto": adult_cedula,
+        "EmailAddress": adult_email,
+        "Celular": adult_phone,
+        "Term_Cond_Voto": terms_accepted,
+    }
+
+
+def build_vote_fields(*, adult_cedula: str, video_choice: str, voted_at: datetime) -> dict:
+    """Vote-state columns only, kept separate from build_adult_row_fields so the
+    registration sync (which never calls this) can't touch them."""
+    return {
+        "Cedula_Adulto": adult_cedula,
+        "HaVotado": True,
+        "Video_Votado": video_choice,
+        "Fecha_Voto": voted_at.isoformat(),
     }

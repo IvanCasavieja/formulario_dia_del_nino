@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_SUBMIT: str = "5/hour"
     RATE_LIMIT_CONFIRM_UPLOAD: str = "20/hour"
     RATE_LIMIT_ADMIN_LOGIN: str = "5/minute"
+    RATE_LIMIT_VOTE: str = "10/hour"
 
     # What to do when ffprobe/server-side validation itself fails unexpectedly
     # (corrupt file vs. tool crash are hard to fully distinguish) - default errs safe (reject),
@@ -48,7 +49,8 @@ class Settings(BaseSettings):
     SFMC_CLIENT_ID: str | None = None  # from the Installed Package (server-to-server / API Integration component)
     SFMC_CLIENT_SECRET: str | None = None
     SFMC_ACCOUNT_ID: str | None = None  # MID of the target Business Unit, if the package spans multiple BUs
-    SFMC_DATA_EXTENSION_KEY: str | None = None  # External Key of the target Data Extension
+    SFMC_DATA_EXTENSION_KEY: str | None = None  # External Key of the Formulario_Video_Nino DE
+    SFMC_ADULTS_DATA_EXTENSION_KEY: str | None = None  # External Key of the sendable adults/voting DE
     SFMC_REQUEST_TIMEOUT_SECONDS: float = 15.0
 
     @property

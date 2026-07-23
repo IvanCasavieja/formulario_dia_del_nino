@@ -103,6 +103,48 @@ class SubmissionCreateResponse(BaseModel):
     expires_in: int
 
 
+class VoteRequest(BaseModel):
+    adult_first_name: str = Field(min_length=1, max_length=200)
+    adult_last_name: str = Field(min_length=1, max_length=200)
+    adult_cedula: str
+    adult_email: EmailStr
+    adult_phone: str
+    video_choice: str = Field(min_length=1, max_length=50)
+
+    terms_accepted: bool
+
+    @field_validator("adult_first_name", "adult_last_name")
+    @classmethod
+    def _strip_names(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("no puede estar vacío")
+        return v
+
+    @field_validator("adult_cedula")
+    @classmethod
+    def _validate_adult_cedula(cls, v: str) -> str:
+        return _validate_cedula(v, sc.PARENT_CEDULA_MIN_DIGITS, sc.PARENT_CEDULA_MAX_DIGITS, "La cédula")
+
+    @field_validator("adult_phone")
+    @classmethod
+    def _validate_phone(cls, v: str) -> str:
+        digits = _normalize_digits(v)
+        if not (sc.PHONE_MIN_DIGITS <= len(digits) <= sc.PHONE_MAX_DIGITS):
+            raise ValueError("Teléfono inválido")
+        return digits
+
+    @model_validator(mode="after")
+    def _validate_terms(self) -> "VoteRequest":
+        if not self.terms_accepted:
+            raise ValueError("Debe aceptar los términos y condiciones")
+        return self
+
+
+class VoteResponse(BaseModel):
+    video_choice: str
+
+
 class AdminLoginRequest(BaseModel):
     password: str
 

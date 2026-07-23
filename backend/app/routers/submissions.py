@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
@@ -6,11 +7,19 @@ from app import r2, security
 from app.config import get_settings
 from app.models import SubmissionStatus
 from app.rate_limit import limiter
-from app.salesforce import SalesforceSyncError, build_row_fields, get_row_by_cedula_nino, upsert_row
+from app.salesforce import (
+    SalesforceSyncError,
+    build_adult_row_fields,
+    build_row_fields,
+    get_row_by_cedula_nino,
+    upsert_adult_row,
+    upsert_row,
+)
 from app.schemas import SubmissionCreateRequest, SubmissionCreateResponse
 from app.worker.tasks import process_submission_video
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/submissions", tags=["submissions"])
 
 # A row with one of these statuses (or none yet) doesn't block a fresh attempt for the
@@ -112,6 +121,30 @@ def confirm_upload(
     except SalesforceSyncError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail={"error": "salesforce_write_failed", "message": str(e)}
+        )
+
+    # Best-effort sync into the sendable adults/voting DE, keyed by the parent's own
+    # cedula - upsert-by-primary-key is what keeps that DE deduplicated (a parent
+    # registering a second child just updates the same row instead of creating one).
+    # Never fails the request: the registration itself already succeeded above in the
+    # DE that actually prevents double registration, so a hiccup here shouldn't make
+    # the client think their submission was lost. Deliberately only sends contact
+    # fields (build_adult_row_fields excludes HaVotado/Video_Votado) so this can never
+    # reset a vote already cast under this cedula.
+    try:
+        upsert_adult_row(
+            build_adult_row_fields(
+                adult_first_name=fields["parent_first_name"],
+                adult_last_name=fields["parent_last_name"],
+                adult_cedula=fields["parent_cedula"],
+                adult_email=fields["parent_email"],
+                adult_phone=fields["parent_phone"],
+                terms_accepted=fields["terms_accepted"],
+            )
+        )
+    except SalesforceSyncError:
+        logger.exception(
+            "confirm_upload: failed to sync parent_cedula=%s into the adults/voting DE", fields["parent_cedula"]
         )
 
     background_tasks.add_task(process_submission_video, video_key, fields["child_cedula"])
