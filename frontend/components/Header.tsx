@@ -15,12 +15,26 @@ export function Header() {
             <p className="font-display text-xl font-semibold text-white">Día del Niño</p>
           </div>
         </div>
-        <Link
-          href="/votar"
-          className="font-display text-sm font-medium text-blue-light underline underline-offset-4 transition hover:text-white"
-        >
-          Votar
-        </Link>
+        <nav className="flex items-center gap-6">
+          <Link
+            href="/"
+            className="font-display text-sm font-medium text-blue-light underline underline-offset-4 transition hover:text-white"
+          >
+            Inicio
+          </Link>
+          <Link
+            href="/votar"
+            className="font-display text-sm font-medium text-blue-light underline underline-offset-4 transition hover:text-white"
+          >
+            Votar
+          </Link>
+          <Link
+            href="/admin"
+            className="font-display text-sm font-medium text-blue-light underline underline-offset-4 transition hover:text-white"
+          >
+            Panel admin
+          </Link>
+        </nav>
       </div>
     </header>
   );
