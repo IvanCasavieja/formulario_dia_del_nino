@@ -234,3 +234,17 @@ credenciales en este entorno para hacerlos:
   activarlo en el flujo real, corré `python scripts/test_salesforce_sync.py` desde
   `backend/` (deja una fila obviamente falsa en la DE, con `Cedula_Nino=99999999` -
   borrala a mano después de confirmar que llegó bien).
+- Etapa 2 (votación): existe una segunda Data Extension, **de adultos/votación**
+  (sendable, external key `803D4CD2-10A3-4A48-93CC-6D095FE705D5`), con `Cedula_Adulto`
+  como Primary Key. Cualquiera puede votar (no hace falta haber inscripto un chico en
+  la etapa 1) vía `POST /api/votes` (`app/routers/votes.py`); una segunda votación con
+  la misma cédula se rechaza con 409 (`HaVotado=true`). Al confirmar una inscripción de
+  etapa 1, `routers/submissions.py` también sincroniza (best-effort) los datos de
+  contacto del adulto en esta DE, sin tocar el estado de voto — ver el comentario al
+  principio de `app/salesforce.py` para el detalle de por qué eso es seguro (upsert
+  parcial, no overwrite de fila completa). Variable de entorno:
+  `SFMC_ADULTS_DATA_EXTENSION_KEY`. Para validar contra el tenant real antes de confiar
+  en esta DE, corré `python scripts/test_adults_sync.py` desde `backend/` (deja una fila
+  de prueba con `Cedula_Adulto=88888888` - borrala a mano después). **Falta construir
+  la UI de votación en `frontend/`** - el endpoint existe pero todavía no lo llama nadie
+  desde el formulario público.
