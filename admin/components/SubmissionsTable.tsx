@@ -36,6 +36,11 @@ export function SubmissionsTable({ submissions, onSelect }: Props) {
                 <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700">
                   {submission.status}
                 </span>
+                {submission.is_vote_candidate && (
+                  <span className="ml-2 rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
+                    ★ Votación
+                  </span>
+                )}
               </td>
               <td className="px-4 py-3 text-right">
                 <button

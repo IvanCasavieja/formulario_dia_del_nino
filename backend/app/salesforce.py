@@ -8,7 +8,9 @@ plumbing below (parameterized by `de_key`):
   submissions, no database. `Cedula_Nino` is its Primary Key (one entry per child, not
   per adult - the same parent can have two kids each entering separately). Reached via
   `insert_row`/`upsert_row`/`get_row_by_cedula_nino`/`list_rows`, which default to
-  `settings.SFMC_DATA_EXTENSION_KEY`.
+  `settings.SFMC_DATA_EXTENSION_KEY`. Also carries `Candidato_Votacion` (bool) - which
+  approved submissions the admin panel picked as the (up to `VOTE_CANDIDATES_LIMIT`)
+  featured videos for etapa 2's public vote; see `list_vote_candidate_rows`.
 - **the adults/voting DE** (etapa 2, votación) - `Cedula_Adulto` is its Primary Key,
   marked Sendable in Contact Builder so it doubles as a deduplicated marketing
   audience. Reached via `upsert_adult_row`/`get_adult_row_by_cedula`, which target
@@ -210,11 +212,10 @@ def _get_row_by_field(de_key: str, field_name: str, field_value: str) -> dict | 
     return items[0]["values"] if items else None
 
 
-def _list_rows(de_key: str, status: str | None = None, limit: int = 200) -> list[dict]:
+def _list_rows(de_key: str, filter_expr: str | None = None, limit: int = 200) -> list[dict]:
     _require_enabled()
     token = _get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
-    filter_expr = f"status eq '{status}'" if status else None
     url = _build_rowset_url(de_key, filter_expr=filter_expr, page_size=limit)
     try:
         response = httpx.get(url, headers=headers, timeout=settings.SFMC_REQUEST_TIMEOUT_SECONDS)
@@ -249,7 +250,21 @@ def list_rows(status: str | None = None, limit: int = 200) -> list[dict]:
     """Lists rows, optionally filtered by Status. This DE is the only store the admin
     panel has to query. Non-sendable DEs cap out around 200 rows per call - fine at
     this volume, would need real pagination past that."""
-    return _list_rows(settings.SFMC_DATA_EXTENSION_KEY, status=status, limit=limit)
+    filter_expr = f"status eq '{status}'" if status else None
+    return _list_rows(settings.SFMC_DATA_EXTENSION_KEY, filter_expr=filter_expr, limit=limit)
+
+
+def list_vote_candidate_rows() -> list[dict]:
+    """Lists the submissions currently marked as public-voting candidates
+    (Candidato_Votacion = true), for the public GET /api/votes/candidates endpoint and
+    for admin.py's cap check before marking a new one. Filters by a single `eq` (see
+    `_build_rowset_url`'s Mashery note - no compound $filter here), then double-checks
+    `status == approved` in Python: the admin endpoint only ever sets this flag on an
+    approved row, but a submission could in theory be rejected after the fact without
+    anyone remembering to also clear the flag, and this DE is public-facing once
+    exposed through the candidates endpoint - don't trust the flag alone."""
+    rows = _list_rows(settings.SFMC_DATA_EXTENSION_KEY, filter_expr="candidato_votacion eq true", limit=200)
+    return [r for r in rows if r.get("status") == "approved"]
 
 
 def build_row_fields(
@@ -276,6 +291,15 @@ def build_row_fields(
         "Apellido_nino": child_last_name,
         "Cedula_Nino": child_cedula,
         "Term_Cond": terms_accepted,
+    }
+
+
+def build_vote_candidate_fields(*, child_cedula: str, enabled: bool) -> dict:
+    """Just the Candidato_Votacion flag, kept separate from build_row_fields so toggling
+    it (routers/admin.py) never touches any of the submission's other columns."""
+    return {
+        "Cedula_Nino": child_cedula,
+        "Candidato_Votacion": enabled,
     }
 
 

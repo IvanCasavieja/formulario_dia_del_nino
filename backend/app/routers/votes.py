@@ -9,12 +9,36 @@ from app.salesforce import (
     build_adult_row_fields,
     build_vote_fields,
     get_adult_row_by_cedula,
+    list_vote_candidate_rows,
     upsert_adult_row,
 )
-from app.schemas import VoteRequest, VoteResponse
+from app.schemas import VoteCandidate, VoteCandidatesResponse, VoteRequest, VoteResponse
 
 settings = get_settings()
 router = APIRouter(prefix="/api/votes", tags=["votes"])
+
+
+@router.get("/candidates", response_model=VoteCandidatesResponse)
+def get_vote_candidates() -> VoteCandidatesResponse:
+    """Public, unauthenticated - the videos the admin panel picked as this campaign's
+    (up to VOTE_CANDIDATES_LIMIT) featured/votable submissions. No rate limit: it's a
+    read-only lookup with no side effects, same as GET /api/health."""
+    try:
+        rows = list_vote_candidate_rows()
+    except SalesforceSyncError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail={"error": "salesforce_read_failed", "message": str(e)}
+        )
+    return VoteCandidatesResponse(
+        candidates=[
+            VoteCandidate(
+                video_choice=row.get("cedula_nino", ""),
+                child_first_name=row.get("nombre_nino", ""),
+                child_last_name=row.get("apellido_nino", ""),
+            )
+            for row in rows
+        ]
+    )
 
 
 @router.post("", response_model=VoteResponse, status_code=status.HTTP_201_CREATED)

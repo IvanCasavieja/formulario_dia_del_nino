@@ -61,6 +61,7 @@ export interface AdminSubmissionListItem {
   child_first_name: string;
   child_last_name: string;
   status: string;
+  is_vote_candidate: boolean;
 }
 
 export async function listSubmissions(status?: string): Promise<AdminSubmissionListItem[]> {
@@ -108,6 +109,23 @@ export async function decideSubmission(
   if (!response.ok) {
     const detail = await readErrorDetail(response);
     throw new AdminApiError(response.status, detail.message ?? "No se pudo guardar la decisión.", detail.error);
+  }
+  return response.json();
+}
+
+export async function setVotingCandidate(childCedula: string, enabled: boolean): Promise<AdminSubmissionDetail> {
+  const response = await adminFetch(`/api/admin/submissions/${childCedula}/voting-candidate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+    throw new AdminApiError(
+      response.status,
+      detail.message ?? "No se pudo actualizar la votación pública.",
+      detail.error,
+    );
   }
   return response.json();
 }

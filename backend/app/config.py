@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     RATE_LIMIT_ADMIN_LOGIN: str = "5/minute"
     RATE_LIMIT_VOTE: str = "10/hour"
 
+    # Etapa 2 (votación pública): tope duro de submissions marcadas a la vez como
+    # candidatas votables (ver app/salesforce.py / routers/admin.py). No es un secreto,
+    # no necesita variable en Render.
+    VOTE_CANDIDATES_LIMIT: int = 4
+
     # What to do when ffprobe/server-side validation itself fails unexpectedly
     # (corrupt file vs. tool crash are hard to fully distinguish) - default errs safe (reject),
     # can be relaxed to "needs_review" if false positives from flaky ffprobe show up in practice.

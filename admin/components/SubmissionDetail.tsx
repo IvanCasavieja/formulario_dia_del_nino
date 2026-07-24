@@ -6,6 +6,7 @@ import {
   type AdminSubmissionDetail as AdminSubmissionDetailType,
   decideSubmission,
   getSubmissionDetail,
+  setVotingCandidate,
 } from "@/lib/adminApi";
 
 interface Props {
@@ -47,6 +48,20 @@ export function SubmissionDetail({ childCedula, onClose, onDecided }: Props) {
       onDecided();
     } catch (err) {
       setError(err instanceof AdminApiError ? err.message : "Error al guardar la decisión.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleVotingCandidate() {
+    if (!detail) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await setVotingCandidate(childCedula, !detail.is_vote_candidate);
+      setDetail(updated);
+    } catch (err) {
+      setError(err instanceof AdminApiError ? err.message : "Error al actualizar la votación pública.");
     } finally {
       setSaving(false);
     }
@@ -134,6 +149,22 @@ export function SubmissionDetail({ childCedula, onClose, onDecided }: Props) {
                 Rechazar
               </button>
             </div>
+
+            {detail.status === "approved" ? (
+              <button
+                onClick={toggleVotingCandidate}
+                disabled={saving}
+                className={`rounded-full border px-4 py-3 font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  detail.is_vote_candidate
+                    ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+                }`}
+              >
+                {detail.is_vote_candidate ? "★ Quitar de votación pública" : "☆ Marcar para votación pública"}
+              </button>
+            ) : (
+              <p className="text-xs text-zinc-500">Solo los videos aprobados pueden marcarse para votación pública.</p>
+            )}
           </>
         )}
       </div>

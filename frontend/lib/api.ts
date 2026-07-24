@@ -70,3 +70,46 @@ export async function confirmUpload(submissionId: string, uploadToken: string): 
     throw new ApiError(response.status, detail.message ?? "No se pudo confirmar la subida del video.", detail.error);
   }
 }
+
+export interface VoteCandidate {
+  video_choice: string;
+  child_first_name: string;
+  child_last_name: string;
+}
+
+export async function getVoteCandidates(): Promise<VoteCandidate[]> {
+  const response = await fetch(`${API_BASE_URL}/api/votes/candidates`);
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+    throw new ApiError(response.status, detail.message ?? "No se pudieron cargar los videos.", detail.error);
+  }
+  const data = await response.json();
+  return data.candidates;
+}
+
+export interface CastVotePayload {
+  adult_first_name: string;
+  adult_last_name: string;
+  adult_cedula: string;
+  adult_email: string;
+  adult_phone: string;
+  video_choice: string;
+  terms_accepted: boolean;
+}
+
+export interface CastVoteResponse {
+  video_choice: string;
+}
+
+export async function castVote(payload: CastVotePayload): Promise<CastVoteResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/votes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+    throw new ApiError(response.status, detail.message ?? "No se pudo registrar el voto.", detail.error);
+  }
+  return response.json();
+}

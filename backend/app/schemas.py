@@ -145,6 +145,18 @@ class VoteResponse(BaseModel):
     video_choice: str
 
 
+class VoteCandidate(BaseModel):
+    # video_choice is just the child's own cedula (Cedula_Nino) - already unique,
+    # no need for a separate slot/id concept.
+    video_choice: str
+    child_first_name: str
+    child_last_name: str
+
+
+class VoteCandidatesResponse(BaseModel):
+    candidates: list[VoteCandidate]
+
+
 class AdminLoginRequest(BaseModel):
     password: str
 
@@ -164,6 +176,7 @@ class AdminSubmissionListItem(BaseModel):
     child_first_name: str
     child_last_name: str
     status: str
+    is_vote_candidate: bool = False
 
 
 class AdminSubmissionDetail(BaseModel):
@@ -182,9 +195,14 @@ class AdminSubmissionDetail(BaseModel):
     terms_accepted: bool
     video_key: str | None = None
     video_view_url: str | None = None
+    is_vote_candidate: bool = False
 
 
 class AdminDecisionRequest(BaseModel):
     decision: Literal["approved", "rejected"]
     note: str | None = Field(default=None, max_length=2000)
     reviewed_by: str | None = Field(default=None, max_length=200)
+
+
+class AdminVotingCandidateRequest(BaseModel):
+    enabled: bool

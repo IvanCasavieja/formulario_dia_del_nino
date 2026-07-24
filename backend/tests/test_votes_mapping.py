@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.salesforce import build_adult_row_fields, build_vote_fields
+from app.salesforce import build_adult_row_fields, build_vote_candidate_fields, build_vote_fields
 
 
 def test_build_adult_row_fields_uses_real_data_extension_column_names():
@@ -48,4 +48,22 @@ def test_build_vote_fields_uses_real_data_extension_column_names():
         "HaVotado": True,
         "Video_Votado": "2",
         "Fecha_Voto": voted_at.isoformat(),
+    }
+
+
+def test_build_vote_candidate_fields_uses_real_data_extension_column_names():
+    fields = build_vote_candidate_fields(child_cedula="7654321", enabled=True)
+
+    assert fields == {
+        "Cedula_Nino": "7654321",
+        "Candidato_Votacion": True,
+    }
+
+
+def test_build_vote_candidate_fields_can_disable():
+    fields = build_vote_candidate_fields(child_cedula="7654321", enabled=False)
+
+    assert fields == {
+        "Cedula_Nino": "7654321",
+        "Candidato_Votacion": False,
     }
