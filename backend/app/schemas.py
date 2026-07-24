@@ -106,9 +106,7 @@ class SubmissionCreateResponse(BaseModel):
 class VoteRequest(BaseModel):
     adult_first_name: str = Field(min_length=1, max_length=200)
     adult_last_name: str = Field(min_length=1, max_length=200)
-    adult_cedula: str
     adult_email: EmailStr
-    adult_phone: str
     video_choice: str = Field(min_length=1, max_length=50)
 
     terms_accepted: bool
@@ -120,19 +118,6 @@ class VoteRequest(BaseModel):
         if not v:
             raise ValueError("no puede estar vacío")
         return v
-
-    @field_validator("adult_cedula")
-    @classmethod
-    def _validate_adult_cedula(cls, v: str) -> str:
-        return _validate_cedula(v, sc.PARENT_CEDULA_MIN_DIGITS, sc.PARENT_CEDULA_MAX_DIGITS, "La cédula")
-
-    @field_validator("adult_phone")
-    @classmethod
-    def _validate_phone(cls, v: str) -> str:
-        digits = _normalize_digits(v)
-        if not (sc.PHONE_MIN_DIGITS <= len(digits) <= sc.PHONE_MAX_DIGITS):
-            raise ValueError("Teléfono inválido")
-        return digits
 
     @model_validator(mode="after")
     def _validate_terms(self) -> "VoteRequest":
@@ -206,3 +191,46 @@ class AdminDecisionRequest(BaseModel):
 
 class AdminVotingCandidateRequest(BaseModel):
     enabled: bool
+
+
+class JuradoLoginRequest(BaseModel):
+    jurado_id: str = Field(min_length=1, max_length=100)
+    password: str
+
+
+class JuradoLoginResponse(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_in: int
+    nombre: str
+
+
+class JuradoVoteRequest(BaseModel):
+    video_choice: str = Field(min_length=1, max_length=50)
+
+
+class JuradoStatusResponse(BaseModel):
+    nombre: str
+    ha_votado: bool
+    video_elegido: str | None = None
+
+
+class ResultadoVideo(BaseModel):
+    video_choice: str
+    child_first_name: str
+    child_last_name: str
+    votos_jurado: int
+    votos_publico: int
+    punto_publico: int
+    puntaje_final: int
+
+
+class JuradoResultadoItem(BaseModel):
+    jurado_id: str
+    nombre: str
+    ha_votado: bool
+
+
+class ResultadosResponse(BaseModel):
+    videos: list[ResultadoVideo]
+    jurados: list[JuradoResultadoItem]

@@ -53,7 +53,12 @@ services:
         sync: false
       - key: SFMC_DATA_EXTENSION_KEY
         sync: false
-      # DE de adultos/votación (etapa 2, sendable, PK Cedula_Adulto) - ver
-      # app/salesforce.py y routers/votes.py.
+      # DE de adultos (etapa 1, sendable, PK Cedula_Adulto) - solo sync de contacto,
+      # sin relación con la votación. Ver app/salesforce.py.
       - key: SFMC_ADULTS_DATA_EXTENSION_KEY
+        sync: false
+      # Votación (etapa 2) - ver app/salesforce.py, routers/votes.py y routers/jurado.py.
+      - key: SFMC_VOTOS_PUBLICO_DATA_EXTENSION_KEY
+        sync: false
+      - key: SFMC_JURADOS_DATA_EXTENSION_KEY
         sync: false

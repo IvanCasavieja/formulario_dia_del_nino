@@ -35,6 +35,9 @@ export function VoteForm() {
   } = useForm<VoteFormValues>({
     resolver: zodResolver(voteSchema),
     defaultValues: {
+      adult_first_name: '',
+      adult_last_name: '',
+      adult_email: '',
       video_choice: '',
       terms_accepted: false,
     },
@@ -144,24 +147,10 @@ export function VoteForm() {
               </label>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className={labelClass}>
-                Tu cédula
-                <input {...register('adult_cedula')} className={inputClass} />
-                <span className="text-xs text-ink-soft">Puede tener 7 u 8 dígitos.</span>
-                {errors.adult_cedula && <span className={errorClass}>{errors.adult_cedula.message}</span>}
-              </label>
-              <label className={labelClass}>
-                Correo electrónico
-                <input {...register('adult_email')} className={inputClass} />
-                {errors.adult_email && <span className={errorClass}>{errors.adult_email.message}</span>}
-              </label>
-            </div>
-
             <label className={labelClass}>
-              Teléfono
-              <input {...register('adult_phone')} className={inputClass} />
-              {errors.adult_phone && <span className={errorClass}>{errors.adult_phone.message}</span>}
+              Correo electrónico
+              <input {...register('adult_email')} className={inputClass} />
+              {errors.adult_email && <span className={errorClass}>{errors.adult_email.message}</span>}
             </label>
 
             <VoteConsentCheckbox

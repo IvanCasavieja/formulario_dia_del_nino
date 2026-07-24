@@ -90,9 +90,7 @@ export async function getVoteCandidates(): Promise<VoteCandidate[]> {
 export interface CastVotePayload {
   adult_first_name: string;
   adult_last_name: string;
-  adult_cedula: string;
   adult_email: string;
-  adult_phone: string;
   video_choice: string;
   terms_accepted: boolean;
 }

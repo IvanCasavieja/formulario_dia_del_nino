@@ -1,7 +1,7 @@
 """Salesforce Marketing Cloud REST API client: OAuth2 client-credentials auth against
 an Installed Package, then row operations against a Data Extension by External Key.
 
-This module talks to TWO Data Extensions, both reached through the same auth/HTTP
+This module talks to FOUR Data Extensions, all reached through the same auth/HTTP
 plumbing below (parameterized by `de_key`):
 
 - **Formulario_Video_Nino** (etapa 1, inscripción) - the ONLY persistent store for
@@ -10,13 +10,27 @@ plumbing below (parameterized by `de_key`):
   `insert_row`/`upsert_row`/`get_row_by_cedula_nino`/`list_rows`, which default to
   `settings.SFMC_DATA_EXTENSION_KEY`. Also carries `Candidato_Votacion` (bool) - which
   approved submissions the admin panel picked as the (up to `VOTE_CANDIDATES_LIMIT`)
-  featured videos for etapa 2's public vote; see `list_vote_candidate_rows`.
-- **the adults/voting DE** (etapa 2, votación) - `Cedula_Adulto` is its Primary Key,
+  candidates competing in etapa 2's vote; see `list_vote_candidate_rows`.
+- **the adults DE** (etapa 1, contact sync only) - `Cedula_Adulto` is its Primary Key,
   marked Sendable in Contact Builder so it doubles as a deduplicated marketing
   audience. Reached via `upsert_adult_row`/`get_adult_row_by_cedula`, which target
-  `settings.SFMC_ADULTS_DATA_EXTENSION_KEY`. Anyone can vote (not just registered
-  parents) - the row is created on first contact and just carries the vote state
-  (`HaVotado`/`Video_Votado`) after that.
+  `settings.SFMC_ADULTS_DATA_EXTENSION_KEY`. Purely a best-effort CRM contact copy of
+  the parent registering a child in etapa 1 (see `submissions.py`'s confirm_upload) -
+  unrelated to voting, no vote state lives here (anymore).
+- **Votos_Publico** (etapa 2, voto público) - `EmailAddress` is its Primary Key. All
+  candidates compete against each other at once (no 1-vs-1 pairing) - the public picks
+  one favorite, once, identified by email rather than cédula since these aren't
+  registered parents (anyone can vote). Reached via `insert_voto_publico`/
+  `get_voto_publico`/`list_votos_publico`, targeting
+  `settings.SFMC_VOTOS_PUBLICO_DATA_EXTENSION_KEY`. Insert (not upsert) is what makes a
+  second vote attempt fail instead of silently overwriting the first.
+- **Jurados** (etapa 2, voto del jurado) - `JuradoId` is its Primary Key. One row per
+  fixed jury member, combining identity + bcrypt password hash + their single vote in
+  one place (same "one DE, one row per entity carries all its state" style as
+  Formulario_Video_Nino). The organizer adds/edits jury members directly in this DE
+  (Contact Builder), no redeploy needed - see `generate_jurado_password_hash.py`.
+  Reached via `get_jurado_row`/`upsert_jurado_row`/`list_jurados`, targeting
+  `settings.SFMC_JURADOS_DATA_EXTENSION_KEY`.
 
 Endpoint/payload shapes verified live against the real tenant - see
 backend/scripts/test_salesforce_sync.py. Notes that aren't obvious from Salesforce's
@@ -46,7 +60,7 @@ docs and cost real trial and error:
   vanishing (this is exactly how the NULL Link_Video rejection surfaced originally).
 """
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 import httpx
@@ -104,7 +118,7 @@ def _require_enabled() -> None:
 def _require_adults_de_configured() -> None:
     if not settings.SFMC_ADULTS_DATA_EXTENSION_KEY:
         raise SalesforceSyncError(
-            "SFMC_ADULTS_DATA_EXTENSION_KEY is not set - refusing to call the adults/voting Data Extension"
+            "SFMC_ADULTS_DATA_EXTENSION_KEY is not set - refusing to call the adults Data Extension"
         )
 
 
@@ -303,21 +317,19 @@ def build_vote_candidate_fields(*, child_cedula: str, enabled: bool) -> dict:
     }
 
 
-# --- Adults/voting DE (etapa 2) -----------------------------------------------------
+# --- Adults DE (etapa 1, contact sync only) ------------------------------------------
 
 
 def upsert_adult_row(fields: dict) -> None:
-    """Inserts or updates a row in the adults/voting DE, matched by Cedula_Adulto.
-    `fields` must include Cedula_Adulto. Used both by the etapa-1 registration sync
-    (contact fields only) and the etapa-2 vote endpoint (contact fields + vote state)."""
+    """Inserts or updates a row in the adults DE, matched by Cedula_Adulto. `fields`
+    must include Cedula_Adulto. Called only by the etapa-1 registration sync in
+    submissions.py - unrelated to voting."""
     _require_adults_de_configured()
     _upsert_row(settings.SFMC_ADULTS_DATA_EXTENSION_KEY, fields)
 
 
 def get_adult_row_by_cedula(cedula_adulto: str) -> dict | None:
-    """Looks up a single row by the adult's cedula in the voting DE. None means this
-    cedula has never registered a child nor voted before - not "not allowed to vote",
-    just "first contact", since anyone can vote regardless of etapa-1 registration."""
+    """Looks up a single row by the adult's cedula in the adults DE."""
     _require_adults_de_configured()
     return _get_row_by_field(settings.SFMC_ADULTS_DATA_EXTENSION_KEY, "cedula_adulto", cedula_adulto)
 
@@ -331,9 +343,8 @@ def build_adult_row_fields(
     adult_phone: str,
     terms_accepted: bool,
 ) -> dict:
-    """Contact + consent columns only for the adults/voting DE - deliberately excludes
-    HaVotado/Video_Votado so a caller can never accidentally reset vote state just by
-    reusing this builder (e.g. the etapa-1 registration sync in submissions.py)."""
+    """Contact + consent columns for the adults DE - the etapa-1 registration sync in
+    submissions.py is the only caller."""
     return {
         "Nombre_Adulto": adult_first_name,
         "Apellido_Adulto": adult_last_name,
@@ -344,12 +355,89 @@ def build_adult_row_fields(
     }
 
 
-def build_vote_fields(*, adult_cedula: str, video_choice: str, voted_at: datetime) -> dict:
-    """Vote-state columns only, kept separate from build_adult_row_fields so the
-    registration sync (which never calls this) can't touch them."""
+# --- Votos_Publico (etapa 2, voto público) --------------------------------------------
+
+
+def _require_votos_publico_de_configured() -> None:
+    if not settings.SFMC_VOTOS_PUBLICO_DATA_EXTENSION_KEY:
+        raise SalesforceSyncError(
+            "SFMC_VOTOS_PUBLICO_DATA_EXTENSION_KEY is not set - refusing to call the public-vote Data Extension"
+        )
+
+
+def get_voto_publico(email: str) -> dict | None:
+    """Looks up a single row by the voter's email. None means this email hasn't voted
+    yet - the public vote endpoint uses this to block a second vote before even
+    attempting the insert."""
+    _require_votos_publico_de_configured()
+    return _get_row_by_field(settings.SFMC_VOTOS_PUBLICO_DATA_EXTENSION_KEY, "emailaddress", email)
+
+
+def insert_voto_publico(fields: dict) -> None:
+    """Inserts a new row, matched by EmailAddress (this DE's primary key). `fields`
+    must include EmailAddress. Insert (not upsert) on purpose - the DE's own primary
+    key rejects a second attempt for the same email as a backstop against a double
+    vote, even if two requests race past the get_voto_publico check above."""
+    _require_votos_publico_de_configured()
+    _insert_row(settings.SFMC_VOTOS_PUBLICO_DATA_EXTENSION_KEY, fields)
+
+
+def list_votos_publico() -> list[dict]:
+    """All public votes cast so far, for the scoring endpoint to tally."""
+    _require_votos_publico_de_configured()
+    return _list_rows(settings.SFMC_VOTOS_PUBLICO_DATA_EXTENSION_KEY, limit=2000)
+
+
+def build_voto_publico_fields(
+    *, adult_first_name: str, adult_last_name: str, adult_email: str, video_choice: str, terms_accepted: bool
+) -> dict:
     return {
-        "Cedula_Adulto": adult_cedula,
+        "EmailAddress": adult_email,
+        "Nombre": f"{adult_first_name} {adult_last_name}".strip(),
+        "VideoElegido": video_choice,
+        "Term_Cond_Voto": terms_accepted,
+        "FechaVoto": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# --- Jurados (etapa 2, voto del jurado) -----------------------------------------------
+
+
+def _require_jurados_de_configured() -> None:
+    if not settings.SFMC_JURADOS_DATA_EXTENSION_KEY:
+        raise SalesforceSyncError(
+            "SFMC_JURADOS_DATA_EXTENSION_KEY is not set - refusing to call the jury Data Extension"
+        )
+
+
+def get_jurado_row(jurado_id: str) -> dict | None:
+    """Looks up a single jury member's row by JuradoId - carries their PasswordHash
+    (login) and current vote state (HaVotado/VideoElegido). None means no such
+    jurado_id exists (the organizer hasn't created that row in Salesforce)."""
+    _require_jurados_de_configured()
+    return _get_row_by_field(settings.SFMC_JURADOS_DATA_EXTENSION_KEY, "juradoid", jurado_id)
+
+
+def upsert_jurado_row(fields: dict) -> None:
+    """Updates a jury member's row, matched by JuradoId. `fields` must include
+    JuradoId. Used only to record a vote (VideoElegido/HaVotado/FechaVoto) - never
+    touches PasswordHash, which the organizer manages directly in Salesforce."""
+    _require_jurados_de_configured()
+    _upsert_row(settings.SFMC_JURADOS_DATA_EXTENSION_KEY, fields)
+
+
+def list_jurados() -> list[dict]:
+    """All jury members - this DE is the source of truth for who's on the jury (no
+    separate config list), so this doubles as both the vote tally input and the
+    "who's still missing" roster for the results endpoint."""
+    _require_jurados_de_configured()
+    return _list_rows(settings.SFMC_JURADOS_DATA_EXTENSION_KEY, limit=200)
+
+
+def build_jurado_vote_fields(*, jurado_id: str, video_choice: str) -> dict:
+    return {
+        "JuradoId": jurado_id,
+        "VideoElegido": video_choice,
         "HaVotado": True,
-        "Video_Votado": video_choice,
-        "Fecha_Voto": voted_at.isoformat(),
+        "FechaVoto": datetime.now(timezone.utc).isoformat(),
     }

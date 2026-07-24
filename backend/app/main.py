@@ -8,7 +8,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import get_settings
 from app.rate_limit import limiter
-from app.routers import admin, health, submissions, votes
+from app.routers import admin, health, jurado, submissions, votes
 
 settings = get_settings()
 
@@ -56,3 +56,5 @@ app.include_router(submissions.router)
 app.include_router(votes.router)
 app.include_router(admin.login_router)
 app.include_router(admin.router)
+app.include_router(jurado.login_router)
+app.include_router(jurado.router)

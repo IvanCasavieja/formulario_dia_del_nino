@@ -80,6 +80,8 @@ Copiar [backend/.env.example](backend/.env.example) a `backend/.env` y completar
 | `SFMC_ENABLED` | `false` hasta tener credenciales reales de Marketing Cloud — con `false` el resto de las `SFMC_*` puede quedar vacío |
 | `SFMC_SUBDOMAIN` / `SFMC_CLIENT_ID` / `SFMC_CLIENT_SECRET` / `SFMC_ACCOUNT_ID` | Credenciales del "Installed Package" (API Integration, server-to-server) creado en Marketing Cloud |
 | `SFMC_DATA_EXTENSION_KEY` | External Key de la Data Extension donde se insertan las inscripciones |
+| `SFMC_VOTOS_PUBLICO_DATA_EXTENSION_KEY` | External Key de la Data Extension donde vota el público (etapa 2), PK `EmailAddress` |
+| `SFMC_JURADOS_DATA_EXTENSION_KEY` | External Key de la Data Extension con las cuentas y votos del jurado (etapa 2), PK `JuradoId` |
 
 El resto de las variables (`RATE_LIMIT_*`, TTLs) tienen defaults razonables en
 `backend/app/config.py` — no hace falta tocarlas para levantar el proyecto.
@@ -199,6 +201,14 @@ credenciales en este entorno para hacerlos:
    `frontend` y otro con Root Directory `admin`), configurar `NEXT_PUBLIC_API_BASE_URL`
    en ambos, y más adelante apuntar el subdominio que asigne Tienda Inglesa al proyecto
    del `frontend`.
+6. **Crear las Data Extensions `Votos_Publico` (PK `EmailAddress`) y `Jurados` (PK
+   `JuradoId`)** en Marketing Cloud y cargar sus external keys en
+   `SFMC_VOTOS_PUBLICO_DATA_EXTENSION_KEY` / `SFMC_JURADOS_DATA_EXTENSION_KEY`.
+7. **Dar de alta cada jurado**: generar su hash con
+   `python scripts/generate_jurado_password_hash.py` (desde `backend/`) y cargar una
+   fila por persona en `Jurados` (`JuradoId`, `Nombre`, `PasswordHash`) directo en
+   Salesforce — no hace falta ningún deploy para agregar, resetear o dar de baja a
+   alguien del jurado.
 
 ## Notas operativas
 
@@ -234,17 +244,28 @@ credenciales en este entorno para hacerlos:
   activarlo en el flujo real, corré `python scripts/test_salesforce_sync.py` desde
   `backend/` (deja una fila obviamente falsa en la DE, con `Cedula_Nino=99999999` -
   borrala a mano después de confirmar que llegó bien).
-- Etapa 2 (votación): existe una segunda Data Extension, **de adultos/votación**
-  (sendable, external key `803D4CD2-10A3-4A48-93CC-6D095FE705D5`), con `Cedula_Adulto`
-  como Primary Key. Cualquiera puede votar (no hace falta haber inscripto un chico en
-  la etapa 1) vía `POST /api/votes` (`app/routers/votes.py`); una segunda votación con
-  la misma cédula se rechaza con 409 (`HaVotado=true`). Al confirmar una inscripción de
-  etapa 1, `routers/submissions.py` también sincroniza (best-effort) los datos de
-  contacto del adulto en esta DE, sin tocar el estado de voto — ver el comentario al
-  principio de `app/salesforce.py` para el detalle de por qué eso es seguro (upsert
-  parcial, no overwrite de fila completa). Variable de entorno:
-  `SFMC_ADULTS_DATA_EXTENSION_KEY`. Para validar contra el tenant real antes de confiar
-  en esta DE, corré `python scripts/test_adults_sync.py` desde `backend/` (deja una fila
-  de prueba con `Cedula_Adulto=88888888` - borrala a mano después). **Falta construir
-  la UI de votación en `frontend/`** - el endpoint existe pero todavía no lo llama nadie
-  desde el formulario público.
+- Etapa 2 (votación): todos los videos marcados como `Candidato_Votacion` (hasta
+  `VOTE_CANDIDATES_LIMIT`, hoy 6) compiten a la vez por dos puntos independientes — no
+  hay enfrentamientos 1 vs 1 ni brackets:
+  - **Voto del público**: cualquiera puede votar una vez (`POST /api/votes`,
+    `app/routers/votes.py`), identificado por email en la Data Extension
+    **Votos_Publico** (PK `EmailAddress`) — una segunda votación con el mismo email se
+    rechaza con 409. Es un insert (no upsert): el propio primary key de la DE es el
+    backstop contra un doble voto aunque dos requests lleguen en simultáneo. El video
+    con más votos del público se lleva 1 punto; si dos o más empatan en el máximo,
+    nadie se lo lleva (`app/scoring.py::compute_resultados`).
+  - **Voto del jurado**: 4-5 personas fijas, cada una vale 1 punto para el video que
+    elige. Sus cuentas (identidad + hash de contraseña + su voto) viven en la Data
+    Extension **Jurados** (PK `JuradoId`), no en variables de entorno — el organizador
+    da de alta, resetea o da de baja un jurado editando filas ahí directamente
+    (Contact Builder), sin tocar Render. La contraseña nunca se guarda en texto plano:
+    generá el hash con `python scripts/generate_jurado_password_hash.py` desde
+    `backend/` y pegá el resultado (no la contraseña) en la columna `PasswordHash`.
+    Login vía `POST /api/jurado/login`, voto vía `POST /api/jurado/vote`
+    (`app/routers/jurado.py`), panel en `admin/app/jurado` (login en `/jurado-login`).
+  - **Puntaje final** por video = votos de jurado que lo eligieron + (1 si ganó el
+    público, 0 si no) — ver `GET /api/admin/votacion/resultados`, mostrado en
+    `admin/app/dashboard/resultados`.
+  - El DE de adultos original (`SFMC_ADULTS_DATA_EXTENSION_KEY`, PK `Cedula_Adulto`) ya
+    no tiene nada que ver con la votación — sigue existiendo solo para el sync de
+    contacto de etapa 1 (ver más arriba), sin estado de voto.

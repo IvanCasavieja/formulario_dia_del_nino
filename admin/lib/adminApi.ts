@@ -113,6 +113,36 @@ export async function decideSubmission(
   return response.json();
 }
 
+export interface ResultadoVideo {
+  video_choice: string;
+  child_first_name: string;
+  child_last_name: string;
+  votos_jurado: number;
+  votos_publico: number;
+  punto_publico: number;
+  puntaje_final: number;
+}
+
+export interface JuradoResultadoItem {
+  jurado_id: string;
+  nombre: string;
+  ha_votado: boolean;
+}
+
+export interface ResultadosResponse {
+  videos: ResultadoVideo[];
+  jurados: JuradoResultadoItem[];
+}
+
+export async function getResultadosVotacion(): Promise<ResultadosResponse> {
+  const response = await adminFetch("/api/admin/votacion/resultados");
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+    throw new AdminApiError(response.status, detail.message ?? "No se pudieron cargar los resultados.", detail.error);
+  }
+  return response.json();
+}
+
 export async function setVotingCandidate(childCedula: string, enabled: boolean): Promise<AdminSubmissionDetail> {
   const response = await adminFetch(`/api/admin/submissions/${childCedula}/voting-candidate`, {
     method: "POST",

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { SubmissionDetail } from "@/components/SubmissionDetail";
 import { SubmissionsTable } from "@/components/SubmissionsTable";
@@ -53,15 +54,23 @@ export default function AdminDashboardPage() {
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-rose-600">Tienda Inglesa</p>
           <h1 className="text-xl font-semibold text-zinc-900">Revisión de videos</h1>
         </div>
-        <button
-          onClick={() => {
-            clearAdminToken();
-            window.location.href = "/login";
-          }}
-          className="text-sm text-zinc-500 hover:text-zinc-900"
-        >
-          Cerrar sesión
-        </button>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/resultados" className="text-sm text-zinc-500 hover:text-zinc-900">
+            Resultados de votación
+          </Link>
+          <Link href="/jurado-login" className="text-sm text-zinc-500 hover:text-zinc-900">
+            Panel del jurado
+          </Link>
+          <button
+            onClick={() => {
+              clearAdminToken();
+              window.location.href = "/login";
+            }}
+            className="text-sm text-zinc-500 hover:text-zinc-900"
+          >
+            Cerrar sesión
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">

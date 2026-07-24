@@ -34,11 +34,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_CONFIRM_UPLOAD: str = "20/hour"
     RATE_LIMIT_ADMIN_LOGIN: str = "5/minute"
     RATE_LIMIT_VOTE: str = "10/hour"
+    RATE_LIMIT_JURADO_LOGIN: str = "5/minute"
 
     # Etapa 2 (votación pública): tope duro de submissions marcadas a la vez como
     # candidatas votables (ver app/salesforce.py / routers/admin.py). No es un secreto,
     # no necesita variable en Render.
-    VOTE_CANDIDATES_LIMIT: int = 4
+    VOTE_CANDIDATES_LIMIT: int = 6
 
     # What to do when ffprobe/server-side validation itself fails unexpectedly
     # (corrupt file vs. tool crash are hard to fully distinguish) - default errs safe (reject),
@@ -55,7 +56,9 @@ class Settings(BaseSettings):
     SFMC_CLIENT_SECRET: str | None = None
     SFMC_ACCOUNT_ID: str | None = None  # MID of the target Business Unit, if the package spans multiple BUs
     SFMC_DATA_EXTENSION_KEY: str | None = None  # External Key of the Formulario_Video_Nino DE
-    SFMC_ADULTS_DATA_EXTENSION_KEY: str | None = None  # External Key of the sendable adults/voting DE
+    SFMC_ADULTS_DATA_EXTENSION_KEY: str | None = None  # External Key of the sendable adults DE (etapa-1 contact sync only)
+    SFMC_VOTOS_PUBLICO_DATA_EXTENSION_KEY: str | None = None  # External Key of the public-vote DE (PK EmailAddress)
+    SFMC_JURADOS_DATA_EXTENSION_KEY: str | None = None  # External Key of the jury accounts+votes DE (PK JuradoId)
     SFMC_REQUEST_TIMEOUT_SECONDS: float = 15.0
 
     @property

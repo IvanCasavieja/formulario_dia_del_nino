@@ -9,6 +9,7 @@ settings = get_settings()
 
 UPLOAD_TOKEN_PURPOSE = "upload_confirm"
 ADMIN_TOKEN_ROLE = "admin"
+JURADO_TOKEN_ROLE = "jurado"
 
 
 class TokenError(Exception):
@@ -83,4 +84,33 @@ def decode_admin_token(token: str) -> dict:
 
     if claims.get("role") != ADMIN_TOKEN_ROLE:
         raise TokenInvalid("invalid_admin_token")
+    return claims
+
+
+def create_jurado_token(jurado_id: str) -> str:
+    """Same shape/secret as create_admin_token (both are internal-panel sessions, not
+    exposed to end users the way the upload token is) - the role claim, not a separate
+    secret, is what keeps a jurado token from being accepted as an admin token or vice
+    versa (see require_jurado/require_admin in app/deps.py)."""
+    now = int(time.time())
+    payload = {
+        "sub": jurado_id,
+        "role": JURADO_TOKEN_ROLE,
+        "iat": now,
+        "exp": now + settings.ADMIN_SESSION_TTL_SECONDS,
+        "jti": str(uuid.uuid4()),
+    }
+    return jwt.encode(payload, settings.ADMIN_JWT_SECRET, algorithm="HS256")
+
+
+def decode_jurado_token(token: str) -> dict:
+    try:
+        claims = jwt.decode(token, settings.ADMIN_JWT_SECRET, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError as e:
+        raise TokenExpired("jurado_token_expired") from e
+    except jwt.InvalidTokenError as e:
+        raise TokenInvalid("invalid_jurado_token") from e
+
+    if claims.get("role") != JURADO_TOKEN_ROLE:
+        raise TokenInvalid("invalid_jurado_token")
     return claims

@@ -6,12 +6,15 @@ from app.config import get_settings
 from app.deps import require_admin
 from app.models import SubmissionStatus
 from app.rate_limit import limiter
+from app.scoring import compute_resultados
 from app.salesforce import (
     SalesforceSyncError,
     build_vote_candidate_fields,
     get_row_by_cedula_nino,
+    list_jurados,
     list_rows,
     list_vote_candidate_rows,
+    list_votos_publico,
     upsert_row,
 )
 from app.schemas import (
@@ -21,6 +24,9 @@ from app.schemas import (
     AdminSubmissionDetail,
     AdminSubmissionListItem,
     AdminVotingCandidateRequest,
+    JuradoResultadoItem,
+    ResultadoVideo,
+    ResultadosResponse,
 )
 
 settings = get_settings()
@@ -159,3 +165,46 @@ def set_voting_candidate(child_cedula: str, payload: AdminVotingCandidateRequest
 
     updated = get_row_by_cedula_nino(child_cedula)
     return _row_to_detail(updated or row)
+
+
+def _jurado_ha_votado(row: dict) -> bool:
+    return str(row.get("havotado", "")).lower() == "true"
+
+
+@router.get("/votacion/resultados", response_model=ResultadosResponse)
+def get_resultados_votacion() -> ResultadosResponse:
+    try:
+        candidatos = list_vote_candidate_rows()
+        votos_publico_rows = list_votos_publico()
+        jurado_rows = list_jurados()
+    except SalesforceSyncError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail={"error": "salesforce_read_failed", "message": str(e)}
+        )
+
+    candidatos_choices = [row.get("cedula_nino", "") for row in candidatos]
+    votos_publico_choices = [row.get("videoelegido", "") for row in votos_publico_rows if row.get("videoelegido")]
+    votos_jurado_choices = [
+        row.get("videoelegido", "") for row in jurado_rows if _jurado_ha_votado(row) and row.get("videoelegido")
+    ]
+
+    resultados = compute_resultados(votos_publico_choices, votos_jurado_choices, candidatos_choices)
+
+    videos = [
+        ResultadoVideo(
+            video_choice=row.get("cedula_nino", ""),
+            child_first_name=row.get("nombre_nino", ""),
+            child_last_name=row.get("apellido_nino", ""),
+            **resultados[row.get("cedula_nino", "")],
+        )
+        for row in candidatos
+    ]
+    jurados = [
+        JuradoResultadoItem(
+            jurado_id=row.get("juradoid", ""),
+            nombre=row.get("nombre", ""),
+            ha_votado=_jurado_ha_votado(row),
+        )
+        for row in jurado_rows
+    ]
+    return ResultadosResponse(videos=videos, jurados=jurados)

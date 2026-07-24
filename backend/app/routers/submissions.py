@@ -123,14 +123,13 @@ def confirm_upload(
             status_code=status.HTTP_502_BAD_GATEWAY, detail={"error": "salesforce_write_failed", "message": str(e)}
         )
 
-    # Best-effort sync into the sendable adults/voting DE, keyed by the parent's own
-    # cedula - upsert-by-primary-key is what keeps that DE deduplicated (a parent
-    # registering a second child just updates the same row instead of creating one).
-    # Never fails the request: the registration itself already succeeded above in the
-    # DE that actually prevents double registration, so a hiccup here shouldn't make
-    # the client think their submission was lost. Deliberately only sends contact
-    # fields (build_adult_row_fields excludes HaVotado/Video_Votado) so this can never
-    # reset a vote already cast under this cedula.
+    # Best-effort sync into the sendable adults DE, keyed by the parent's own cedula -
+    # upsert-by-primary-key is what keeps that DE deduplicated (a parent registering a
+    # second child just updates the same row instead of creating one). Never fails the
+    # request: the registration itself already succeeded above in the DE that actually
+    # prevents double registration, so a hiccup here shouldn't make the client think
+    # their submission was lost. Only sends contact fields (build_adult_row_fields) -
+    # this DE has no connection to voting (see app/salesforce.py's module docstring).
     try:
         upsert_adult_row(
             build_adult_row_fields(
@@ -144,7 +143,7 @@ def confirm_upload(
         )
     except SalesforceSyncError:
         logger.exception(
-            "confirm_upload: failed to sync parent_cedula=%s into the adults/voting DE", fields["parent_cedula"]
+            "confirm_upload: failed to sync parent_cedula=%s into the adults DE", fields["parent_cedula"]
         )
 
     background_tasks.add_task(process_submission_video, video_key, fields["child_cedula"])

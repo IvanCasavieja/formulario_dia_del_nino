@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import logo from "@/public/logo-tienda-inglesa.png";
 
 export function Header() {
@@ -14,6 +15,12 @@ export function Header() {
             <p className="font-display text-xl font-semibold text-white">Día del Niño</p>
           </div>
         </div>
+        <Link
+          href="/votar"
+          className="font-display text-sm font-medium text-blue-light underline underline-offset-4 transition hover:text-white"
+        >
+          Votar
+        </Link>
       </div>
     </header>
   );
