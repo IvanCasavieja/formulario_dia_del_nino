@@ -7,6 +7,19 @@ import { ApiError, castVote, getVoteCandidates, type VoteCandidate } from '@/lib
 import { VoteConsentCheckbox } from './VoteConsentCheckbox';
 import { voteSchema, type VoteFormValues } from './validation';
 
+// Visit /votar?demo to preview the grid with fake candidates - useful for checking the
+// layout before any real submission has been marked Candidato_Votacion in Salesforce.
+// Reads window.location directly (no next/navigation useSearchParams) so this doesn't
+// need a Suspense boundary around the page. Real visitors never see this: nobody
+// stumbles onto ?demo by accident, and submitting while in this mode never reaches the
+// API (see onSubmit) so it can't pollute Votos_Publico with fake rows.
+const DEMO_CANDIDATES: VoteCandidate[] = [
+  { video_choice: '__demo_1', child_first_name: 'Ejemplo', child_last_name: 'Uno' },
+  { video_choice: '__demo_2', child_first_name: 'Ejemplo', child_last_name: 'Dos' },
+  { video_choice: '__demo_3', child_first_name: 'Ejemplo', child_last_name: 'Tres' },
+  { video_choice: '__demo_4', child_first_name: 'Ejemplo', child_last_name: 'Cuatro' },
+];
+
 function PlaceholderThumbnail({ n }: { n: number }) {
   return (
     <div className="flex aspect-video w-full items-center justify-center rounded-xl bg-gradient-to-br from-blue to-blue-deep">
@@ -26,6 +39,7 @@ export function VoteForm() {
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [voted, setVoted] = useState(false);
   const [slowLoad, setSlowLoad] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
 
   const {
     register,
@@ -45,6 +59,11 @@ export function VoteForm() {
   });
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('demo')) {
+      setIsDemo(true);
+      setCandidates(DEMO_CANDIDATES);
+      return;
+    }
     let cancelled = false;
     // The backend (Render free tier) can take 30-60s to wake up from a cold start on
     // its first request in a while - without this, that delay looks indistinguishable
@@ -77,6 +96,10 @@ export function VoteForm() {
 
   const onSubmit = async (values: VoteFormValues) => {
     setSubmissionError(null);
+    if (isDemo) {
+      setSubmissionError('Esto es una vista previa - ningún voto se registra en este modo. Sacá "?demo" de la URL para ver el estado real.');
+      return;
+    }
     try {
       await castVote(values);
       setVoted(true);
@@ -102,6 +125,12 @@ export function VoteForm() {
       </div>
 
       <div className="flex flex-col gap-6 p-6 sm:p-8">
+        {isDemo && (
+          <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            Vista previa con videos de ejemplo - ningún voto se registra en este modo. Sacá{' '}
+            <code>?demo</code> de la URL para ver el estado real.
+          </p>
+        )}
         {voted ? (
           <p className="rounded-xl border border-line bg-bg p-4 text-ink">
             ¡Gracias por votar! Tu voto quedó registrado.
