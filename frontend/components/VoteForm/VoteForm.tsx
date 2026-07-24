@@ -49,9 +49,12 @@ export function VoteForm() {
       .then((data) => {
         if (!cancelled) setCandidates(data);
       })
-      .catch((error) => {
+      .catch(() => {
+        // GET /api/votes/candidates takes no input, so any failure here is an internal
+        // backend/Salesforce error, never something meant for a public visitor to read
+        // (unlike castVote's errors below, which can be a real "you already voted").
         if (!cancelled) {
-          setLoadError(error instanceof ApiError ? error.message : 'No se pudieron cargar los videos.');
+          setLoadError('No se pudieron cargar los videos. Intenta de nuevo en unos minutos.');
         }
       });
     return () => {

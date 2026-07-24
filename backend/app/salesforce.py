@@ -271,14 +271,18 @@ def list_rows(status: str | None = None, limit: int = 200) -> list[dict]:
 def list_vote_candidate_rows() -> list[dict]:
     """Lists the submissions currently marked as public-voting candidates
     (Candidato_Votacion = true), for the public GET /api/votes/candidates endpoint and
-    for admin.py's cap check before marking a new one. Filters by a single `eq` (see
-    `_build_rowset_url`'s Mashery note - no compound $filter here), then double-checks
-    `status == approved` in Python: the admin endpoint only ever sets this flag on an
-    approved row, but a submission could in theory be rejected after the fact without
-    anyone remembering to also clear the flag, and this DE is public-facing once
-    exposed through the candidates endpoint - don't trust the flag alone."""
-    rows = _list_rows(settings.SFMC_DATA_EXTENSION_KEY, filter_expr="candidato_votacion eq true", limit=200)
-    return [r for r in rows if r.get("status") == "approved"]
+    for admin.py's cap check before marking a new one. Filters by `status` (a text
+    field, confirmed working) rather than `candidato_votacion` itself - live testing
+    against the real tenant showed this DE's $filter rejects that field outright
+    ("invalid fields for custom object"), apparently because it's a Boolean column and
+    this endpoint's $filter only supports Text/Number/Date. The `Candidato_Votacion`
+    check happens in Python instead. This also covers the same case the old docstring
+    called out: a submission rejected after being marked a candidate, without anyone
+    remembering to clear the flag - this DE is public-facing once exposed through the
+    candidates endpoint, so both conditions are checked regardless of filtering
+    concerns."""
+    rows = _list_rows(settings.SFMC_DATA_EXTENSION_KEY, filter_expr="status eq 'approved'", limit=200)
+    return [r for r in rows if str(r.get("candidato_votacion", "")).lower() == "true"]
 
 
 def build_row_fields(
