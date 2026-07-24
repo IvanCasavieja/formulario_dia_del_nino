@@ -25,6 +25,7 @@ export function VoteForm() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [voted, setVoted] = useState(false);
+  const [slowLoad, setSlowLoad] = useState(false);
 
   const {
     register,
@@ -45,6 +46,12 @@ export function VoteForm() {
 
   useEffect(() => {
     let cancelled = false;
+    // The backend (Render free tier) can take 30-60s to wake up from a cold start on
+    // its first request in a while - without this, that delay looks indistinguishable
+    // from "stuck" since the plain "Cargando videos..." text never changes.
+    const slowTimer = setTimeout(() => {
+      if (!cancelled) setSlowLoad(true);
+    }, 6000);
     getVoteCandidates()
       .then((data) => {
         if (!cancelled) setCandidates(data);
@@ -56,9 +63,13 @@ export function VoteForm() {
         if (!cancelled) {
           setLoadError('No se pudieron cargar los videos. Intenta de nuevo en unos minutos.');
         }
+      })
+      .finally(() => {
+        if (!cancelled) clearTimeout(slowTimer);
       });
     return () => {
       cancelled = true;
+      clearTimeout(slowTimer);
     };
   }, []);
 
@@ -100,7 +111,12 @@ export function VoteForm() {
             <div>
               <h2 className="font-display text-lg font-semibold text-ink">Elegí tu video favorito</h2>
               {loadError && <p className={`mt-2 ${errorClass}`}>{loadError}</p>}
-              {!loadError && candidates === null && <p className="mt-2 text-sm text-ink-soft">Cargando videos...</p>}
+              {!loadError && candidates === null && (
+                <p className="mt-2 text-sm text-ink-soft">
+                  Cargando videos...
+                  {slowLoad && ' Puede tardar hasta un minuto la primera vez que se abre la página.'}
+                </p>
+              )}
               {!loadError && candidates !== null && candidates.length === 0 && (
                 <p className="mt-2 text-sm text-ink-soft">Todavía no hay videos habilitados para la votación pública.</p>
               )}

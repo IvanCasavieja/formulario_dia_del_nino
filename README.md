@@ -160,6 +160,17 @@ Son **dos proyectos de Vercel separados**, ambos apuntando a este mismo repo per
 En ambos, configurar `NEXT_PUBLIC_API_BASE_URL` apuntando a la URL del backend en
 Render.
 
+**Estado actual (TEMP):** el Proyecto 2 (`admin`) todavía no se creó en Vercel, así
+que mientras tanto el panel vive *además* nesteado dentro del Proyecto 1, en
+`frontend/app/admin` (+ `frontend/components/admin`, `frontend/lib/admin`) - una copia
+literal de `admin/`, con imports y links reescritos de `/` a `/admin`. `admin/` en sí no
+se tocó y sigue siendo desplegable como su propio proyecto en cualquier momento; cuando
+eso pase, borrar todo `frontend/app/admin` (+ `components/admin`, `lib/admin`). Ver el
+comentario al principio de `frontend/app/admin/layout.tsx`. Mientras dure este arreglo,
+el panel queda en el mismo dominio público (`/admin/login`, etc.) en vez de una URL
+separada y no listada - la autenticación (contraseña + JWT) sigue siendo la protección
+real, pero es más fácil de encontrar/adivinar que antes.
+
 ### Subdominio de Tienda Inglesa
 
 Cuando Tienda Inglesa asigne el subdominio final para el formulario: apuntarlo al
